@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { deleteShot, listShots, putShot } from "../db";
 import { newId, type Captured } from "../capture";
 import { judgeQuality } from "../quality";
 import { CONDITION_LABEL, type Condition, type Shot, type Stone } from "../types";
+import { BulkImport } from "./BulkImport";
 import { Camera } from "./Camera";
 
 const FACES = ["A面", "B面", "C面", "D面", "側面", "その他"];
@@ -14,6 +15,8 @@ export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => voi
   const [hasCard, setHasCard] = useState(true);
   const [mode, setMode] = useState<"list" | "camera">("list");
   const [pending, setPending] = useState<Captured | null>(null);
+  const [importFiles, setImportFiles] = useState<File[] | null>(null);
+  const importRef = useRef<HTMLInputElement>(null);
 
   const reload = () => listShots(stone.id).then(setShots);
   useEffect(() => {
@@ -107,6 +110,29 @@ export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => voi
     </div>
   );
 
+  function onImportFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (files.length) setImportFiles(files);
+  }
+
+  if (importFiles) {
+    return (
+      <BulkImport
+        stone={stone}
+        files={importFiles}
+        condition={condition}
+        face={face}
+        hasCard={hasCard}
+        settings={settings}
+        onDone={() => {
+          setImportFiles(null);
+          reload();
+        }}
+      />
+    );
+  }
+
   if (mode === "camera") {
     return (
       <div className="screen camera-screen">
@@ -131,6 +157,10 @@ export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => voi
       <button className="primary wide" onClick={() => setMode("camera")}>
         {CONDITION_LABEL[condition]}を撮影する
       </button>
+      <button className="wide import-button" onClick={() => importRef.current?.click()}>
+        写真をまとめて取り込む
+      </button>
+      <input ref={importRef} type="file" accept="image/*" multiple hidden onChange={onImportFiles} />
       {count("dry") > 0 && count("wet") === 0 && (
         <p className="tip">乾燥写真のみです。同じ面を水で濡らした写真も撮ると、褐色化の比較ができます。</p>
       )}

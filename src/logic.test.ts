@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { computeQuality, judgeQuality } from "./quality";
 import { buildMetadataRows, METADATA_HEADER } from "./exportZip";
 import { nextStoneId } from "./db";
+import { fitLongSide, MAX_LONG_SIDE } from "./resize";
 import type { Shot, Stone } from "./types";
 
 function img(w: number, h: number, f: (x: number, y: number) => number) {
@@ -53,5 +54,29 @@ describe("export", () => {
   it("next stone id", () => {
     expect(nextStoneId([])).toBe("S001");
     expect(nextStoneId([...stones, { ...stones[0], id: "S009" }])).toBe("S010");
+  });
+});
+
+describe("resize", () => {
+  it("keeps images within the limit as-is (no upscaling)", () => {
+    expect(fitLongSide(2560, 1920)).toEqual({ width: 2560, height: 1920 });
+    expect(fitLongSide(800, 600)).toEqual({ width: 800, height: 600 });
+  });
+  it("shrinks landscape so the long side equals the limit", () => {
+    expect(fitLongSide(4032, 3024)).toEqual({ width: 2560, height: 1920 });
+  });
+  it("shrinks portrait by its height", () => {
+    expect(fitLongSide(3024, 4032)).toEqual({ width: 1920, height: 2560 });
+  });
+  it("rounds the short side and keeps aspect ratio", () => {
+    const r = fitLongSide(4000, 3000, 1000);
+    expect(r).toEqual({ width: 1000, height: 750 });
+    const odd = fitLongSide(5000, 2813);
+    expect(odd.width).toBe(MAX_LONG_SIDE);
+    expect(odd.height).toBe(Math.round((2813 * 2560) / 5000));
+  });
+  it("handles square and extreme aspect ratios", () => {
+    expect(fitLongSide(3000, 3000)).toEqual({ width: 2560, height: 2560 });
+    expect(fitLongSide(10000, 1)).toEqual({ width: 2560, height: 1 });
   });
 });

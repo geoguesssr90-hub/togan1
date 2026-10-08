@@ -1,4 +1,5 @@
 import { computeQuality } from "./quality";
+import { fitLongSide } from "./resize";
 import type { QualityMetrics } from "./types";
 
 export interface Captured {
@@ -34,10 +35,16 @@ export async function captureFrom(source: CanvasImageSource, width: number, heig
   return { blob, width, height, quality, previewUrl: URL.createObjectURL(blob) };
 }
 
+/**
+ * 写真ファイルを読み込み、長辺が上限を超えていれば縮小して JPEG 化する。
+ * imageOrientation: "from-image" で EXIF の向きを反映した状態でデコードされ（bmp.width/height も回転後の値）、
+ * それを canvas に描いて再エンコードするので、保存される JPEG は画素自体が正しい向きになる（EXIF は残らない）。
+ */
 export async function captureFromFile(file: File): Promise<Captured> {
-  const bmp = await createImageBitmap(file, { imageOrientation: "from-image" } as ImageBitmapOptions);
+  const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
   try {
-    return await captureFrom(bmp, bmp.width, bmp.height);
+    const { width, height } = fitLongSide(bmp.width, bmp.height);
+    return await captureFrom(bmp, width, height);
   } finally {
     bmp.close();
   }

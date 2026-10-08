@@ -21,10 +21,11 @@
 ## 構成
 - `src/types.ts` 等級リスト（GRADES）・データ型
 - `src/quality.ts` 画質指標（ピント=ラプラシアン分散、白飛び、黒つぶれ）と警告しきい値（暫定値）
-- `src/capture.ts` フレーム→JPEG＋縮小画像で画質評価
+- `src/capture.ts` フレーム→JPEG＋縮小画像で画質評価。ファイル取り込み時は長辺2560pxまで縮小
+- `src/resize.ts` 長辺上限に収める寸法計算（純粋関数）
 - `src/db.ts` IndexedDB
 - `src/exportZip.ts` 学習用ZIP: `images/grade_{等級}/{石ID}/{dry|wet}_{連番}.jpg` + `metadata.csv` + `stones.csv`
-- `src/components/` Home（一覧・集計・書き出し）/ StoneDetail（撮影設定・ギャラリー）/ Camera
+- `src/components/` Home（一覧・集計・書き出し）/ StoneDetail（撮影設定・ギャラリー）/ Camera / BulkImport（写真のまとめて取り込み）
 
 ## 約束事
 - UI文言は日本語。絵文字は使わない
