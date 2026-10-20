@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { deleteShot, listShots, putShot } from "../db";
+import { deleteShot, deleteShots, listShots, putShot } from "../db";
 import { newId, type Captured } from "../capture";
 import { judgeQuality } from "../quality";
+import { toggled } from "../selection";
 import { CONDITION_LABEL, type Shot, type Stone } from "../types";
 import { BulkImport } from "./BulkImport";
 import { Camera } from "./Camera";
@@ -13,6 +14,9 @@ export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => voi
   const [mode, setMode] = useState<"list" | "camera" | "split">("list");
   const [pending, setPending] = useState<Captured | null>(null);
   const [importFiles, setImportFiles] = useState<File[] | null>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
 
   const reload = () => listShots(stone.id).then(setShots);
@@ -53,6 +57,27 @@ export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => voi
     if (!confirm("この写真を削除しますか？")) return;
     await deleteShot(id);
     reload();
+  }
+
+  function endSelect() {
+    setSelecting(false);
+    setSelected(new Set());
+  }
+
+  async function removeSelected() {
+    const n = selected.size;
+    if (n === 0) return;
+    if (!confirm(`写真 ${n} 枚を削除します。元に戻せません。よろしいですか？`)) return;
+    setBusy(true);
+    try {
+      await deleteShots([...selected]);
+      endSelect();
+      await reload();
+    } catch {
+      alert("削除できませんでした。何も削除されていません。");
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (pending) {
@@ -145,42 +170,82 @@ export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => voi
   }
 
   return (
-    <div className="screen">
+    <div className={"screen" + (selecting ? " selecting" : "")}>
       <button className="back" onClick={onBack}>← 一覧</button>
       <h2>
         {stone.id} <span className="grade">{stone.grade}等級</span>
       </h2>
       {(stone.source || stone.note) && <p className="meta">{[stone.source, stone.note].filter(Boolean).join(" / ")}</p>}
-      {settings}
-      <button className="primary wide" onClick={() => setMode("camera")}>
-        撮影する
-      </button>
-      <button className="wide import-button" onClick={() => importRef.current?.click()}>
-        写真をまとめて取り込む
-      </button>
-      <input ref={importRef} type="file" accept="image/*" multiple hidden onChange={onImportFiles} />
-      {shots.length >= 2 && (
-        <button className="ghost wide" onClick={() => setMode("split")}>
-          N枚ずつ別の石に分ける
-        </button>
+      {!selecting && (
+        <>
+          {settings}
+          <button className="primary wide" onClick={() => setMode("camera")}>
+            撮影する
+          </button>
+          <button className="wide import-button" onClick={() => importRef.current?.click()}>
+            写真をまとめて取り込む
+          </button>
+          <input ref={importRef} type="file" accept="image/*" multiple hidden onChange={onImportFiles} />
+          {shots.length >= 2 && (
+            <button className="ghost wide" onClick={() => setMode("split")}>
+              N枚ずつ別の石に分ける
+            </button>
+          )}
+        </>
       )}
       <section>
-        <h3>写真（{shots.length}枚）</h3>
+        <div className="list-head">
+          <h3>写真（{shots.length}枚）</h3>
+          {shots.length > 0 && (
+            <button className="ghost small" onClick={selecting ? endSelect : () => setSelecting(true)}>
+              {selecting ? "完了" : "選択"}
+            </button>
+          )}
+        </div>
+        {selecting && (
+          <div className="select-tools">
+            <button className="small" onClick={() => setSelected(new Set(shots.map((s) => s.id)))}>すべて選択</button>
+            <button className="small ghost" onClick={() => setSelected(new Set())}>選択を解除</button>
+          </div>
+        )}
         <div className="grid">
-          {shots.map((s) => (
-            <figure key={s.id}>
-              <img src={urls.get(s.id)} alt={s.face || "写真"} loading="lazy" />
-              <figcaption>
-                {s.face}
-                {/* 湿潤の撮影は廃止したが、以前に撮った湿潤写真は見分けられるようにする */}
-                {s.condition === "wet" && <span className="wet-tag">{CONDITION_LABEL.wet}</span>}
-                {judgeQuality(s.quality).some((w) => w.level === "bad") && <span className="flag">要確認</span>}
-                <button className="x" onClick={() => remove(s.id)} aria-label="削除">削除</button>
-              </figcaption>
-            </figure>
-          ))}
+          {shots.map((s) => {
+            const img = <img src={urls.get(s.id)} alt={s.face || "写真"} loading="lazy" />;
+            const on = selected.has(s.id);
+            return (
+              <figure key={s.id}>
+                {selecting ? (
+                  <button
+                    className="shot-select"
+                    aria-pressed={on}
+                    aria-label={on ? "選択を外す" : "選択する"}
+                    onClick={() => setSelected((sel) => toggled(sel, s.id))}
+                  >
+                    {img}
+                    {on && <span className="tick" aria-hidden>選択</span>}
+                  </button>
+                ) : (
+                  img
+                )}
+                <figcaption>
+                  {s.face}
+                  {/* 湿潤の撮影は廃止したが、以前に撮った湿潤写真は見分けられるようにする */}
+                  {s.condition === "wet" && <span className="wet-tag">{CONDITION_LABEL.wet}</span>}
+                  {judgeQuality(s.quality).some((w) => w.level === "bad") && <span className="flag">要確認</span>}
+                  {!selecting && <button className="x" onClick={() => remove(s.id)} aria-label="削除">削除</button>}
+                </figcaption>
+              </figure>
+            );
+          })}
         </div>
       </section>
+      {selecting && (
+        <div className="select-bar">
+          <button className="danger" onClick={removeSelected} disabled={busy || selected.size === 0}>
+            {busy ? "削除中…" : `選択した写真を削除（${selected.size}枚）`}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

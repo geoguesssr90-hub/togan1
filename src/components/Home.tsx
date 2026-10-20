@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { deleteStone, listShots, listStones, nextStoneId, putStone } from "../db";
+import { deleteAllData, deleteStone, deleteStones, listShots, listStones, nextStoneId, putStone } from "../db";
 import { exportDataset } from "../exportZip";
+import { deletionSummary, isWipeConfirmed, toggled, WIPE_CONFIRM_TEXT, withGrade } from "../selection";
 import { GRADES, type Grade, type Shot, type Stone } from "../types";
 import { ModelPanel } from "./ModelPanel";
 
@@ -19,6 +20,10 @@ export function Home({
   const [form, setForm] = useState({ id: "", grade: "3" as Grade, source: "", note: "" });
   const [exporting, setExporting] = useState(false);
   const [storage, setStorage] = useState<string>("");
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [wiping, setWiping] = useState(false);
 
   async function reload() {
     const [st, sh] = await Promise.all([listStones(), listShots()]);
@@ -57,6 +62,33 @@ export function Home({
     reload();
   }
 
+  function startSelect() {
+    setAdding(false);
+    setSelected(new Set());
+    setSelecting(true);
+  }
+
+  function endSelect() {
+    setSelecting(false);
+    setSelected(new Set());
+  }
+
+  async function removeSelected() {
+    const { stones: n, photos: m } = deletionSummary(selected, shots);
+    if (n === 0) return;
+    if (!confirm(`石 ${n} 個と写真 ${m} 枚を削除します。元に戻せません。よろしいですか？`)) return;
+    setBusy(true);
+    try {
+      await deleteStones([...selected]);
+      endSelect();
+      await reload();
+    } catch {
+      alert("削除できませんでした。何も削除されていません。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function doExport() {
     setExporting(true);
     try {
@@ -72,11 +104,34 @@ export function Home({
     }
   }
 
+  const exportButton = (
+    <button className="ghost wide" onClick={doExport} disabled={exporting || shots.length === 0}>
+      {exporting ? "書き出し中…" : `学習用データを書き出す（${shots.length}枚・ZIP）`}
+    </button>
+  );
+
+  if (wiping) {
+    return (
+      <WipeAll
+        stoneCount={stones.length}
+        photoCount={shots.length}
+        exportButton={exportButton}
+        onCancel={() => setWiping(false)}
+        onDone={async () => {
+          setWiping(false);
+          endSelect();
+          await reload();
+        }}
+      />
+    );
+  }
+
   const per = (id: string) => shots.filter((s) => s.stoneId === id).length;
   const usedGrades = GRADES.filter((g) => stones.some((s) => s.grade === g));
+  const summary = deletionSummary(selected, shots);
 
   return (
-    <div className="screen">
+    <div className={"screen" + (selecting ? " selecting" : "")}>
       <header className="top">
         <h1>陶眼 <span>データ収集</span></h1>
         <p className="meta">{storage}</p>
@@ -99,7 +154,7 @@ export function Home({
         </table>
       )}
 
-      {adding ? (
+      {selecting ? null : adding ? (
         <form className="card form" onSubmit={add}>
           <label>石ID<input value={form.id} onChange={(e) => setForm({ ...form, id: e.target.value })} required /></label>
           <label>
@@ -122,26 +177,126 @@ export function Home({
         </>
       )}
 
+      {stones.length > 0 && (
+        <div className="list-head">
+          <h3>石（{stones.length}個）</h3>
+          <button className="ghost small" onClick={selecting ? endSelect : startSelect}>
+            {selecting ? "完了" : "選択"}
+          </button>
+        </div>
+      )}
+
+      {selecting && (
+        <div className="select-tools">
+          <button className="small" onClick={() => setSelected(new Set(stones.map((s) => s.id)))}>すべて選択</button>
+          {usedGrades.map((g) => (
+            <button key={g} className="small" onClick={() => setSelected((sel) => withGrade(sel, stones, g))}>
+              {g}等級
+            </button>
+          ))}
+          <button className="small ghost" onClick={() => setSelected(new Set())}>選択を解除</button>
+        </div>
+      )}
+
       <ul className="stones">
         {stones.map((s) => (
-          <li key={s.id} className="card">
-            <button className="stone-open" onClick={() => onOpen(s)}>
-              <strong>{s.id}</strong>
-              <span className="grade">{s.grade}等級</span>
-              <span className="counts">写真 {per(s.id)}枚</span>
-            </button>
-            <button className="x" onClick={() => remove(s)} aria-label={`${s.id}を削除`}>削除</button>
+          <li key={s.id} className={"card" + (selected.has(s.id) ? " selected" : "")}>
+            {selecting ? (
+              <label className="stone-open stone-check">
+                <input type="checkbox" checked={selected.has(s.id)} onChange={() => setSelected((sel) => toggled(sel, s.id))} />
+                <strong>{s.id}</strong>
+                <span className="grade">{s.grade}等級</span>
+                <span className="counts">写真 {per(s.id)}枚</span>
+              </label>
+            ) : (
+              <>
+                <button className="stone-open" onClick={() => onOpen(s)}>
+                  <strong>{s.id}</strong>
+                  <span className="grade">{s.grade}等級</span>
+                  <span className="counts">写真 {per(s.id)}枚</span>
+                </button>
+                <button className="x" onClick={() => remove(s)} aria-label={`${s.id}を削除`}>削除</button>
+              </>
+            )}
           </li>
         ))}
         {stones.length === 0 && !adding && <li className="empty">まだ石が登録されていません。</li>}
       </ul>
 
-      <ModelPanel onJudge={onJudge} />
+      {!selecting && (
+        <>
+          <ModelPanel onJudge={onJudge} />
+          {exportButton}
+          <p className="tip">写真はこの端末のブラウザ内にだけ保存されます。撮影後はこまめにZIPで書き出してください。</p>
+          {(stones.length > 0 || shots.length > 0) && (
+            <button className="link-danger" onClick={() => setWiping(true)}>すべてのデータを削除</button>
+          )}
+        </>
+      )}
 
-      <button className="ghost wide" onClick={doExport} disabled={exporting || shots.length === 0}>
-        {exporting ? "書き出し中…" : `学習用データを書き出す（${shots.length}枚・ZIP）`}
-      </button>
-      <p className="tip">写真はこの端末のブラウザ内にだけ保存されます。撮影後はこまめにZIPで書き出してください。</p>
+      {selecting && (
+        <div className="select-bar">
+          <button className="danger" onClick={removeSelected} disabled={busy || summary.stones === 0}>
+            {busy ? "削除中…" : `選択した石を削除（${summary.stones}個・写真${summary.photos}枚）`}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** すべてのデータを削除する確認画面。「削除する」と入力しないと実行できない */
+function WipeAll({
+  stoneCount,
+  photoCount,
+  exportButton,
+  onCancel,
+  onDone,
+}: {
+  stoneCount: number;
+  photoCount: number;
+  exportButton: React.ReactNode;
+  onCancel: () => void;
+  onDone: () => void;
+}) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function wipe() {
+    if (!isWipeConfirmed(text)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteAllData();
+      onDone();
+    } catch {
+      setError("削除できませんでした。何も削除されていません。");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="screen">
+      <button className="back" onClick={onCancel}>← 一覧</button>
+      <h2>すべてのデータを削除</h2>
+      <p>
+        この端末に保存した石 {stoneCount} 個と写真 {photoCount} 枚をすべて削除します。元に戻せません。
+        端末で学習したモデルは削除しません。
+      </p>
+      <p className="warnings warn">先にZIPで書き出すことをおすすめします。</p>
+      {exportButton}
+      <label className="wipe-confirm">
+        確認のため「{WIPE_CONFIRM_TEXT}」と入力してください
+        <input value={text} onChange={(e) => setText(e.target.value)} autoComplete="off" />
+      </label>
+      {error && <p className="warnings bad">{error}</p>}
+      <div className="row">
+        <button className="ghost" onClick={onCancel} disabled={busy}>やめる</button>
+        <button className="danger" onClick={wipe} disabled={busy || !isWipeConfirmed(text)}>
+          {busy ? "削除中…" : "すべて削除する"}
+        </button>
+      </div>
     </div>
   );
 }

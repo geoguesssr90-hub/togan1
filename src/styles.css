@@ -121,3 +121,21 @@ button.import-button { margin-top: 0; }
 .split-row strong { font-size: 13px; font-variant-numeric: tabular-nums; }
 .split-thumbs { display: grid; gap: 4px; }
 .split-thumbs img, .split-blank { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; display: block; background: var(--line); }
+
+/* まとめて削除 */
+button.small { min-height: 36px; padding: 6px 12px; font-size: 13px; }
+.list-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 20px 0 8px; }
+.list-head h3 { margin: 0; }
+.select-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.stone-check { cursor: pointer; }
+.stone-check input { width: 20px; min-height: 20px; flex: none; }
+.stones li.selected { border-color: var(--bad); }
+.shot-select { position: relative; display: block; width: 100%; padding: 0; min-height: 0; border: 3px solid transparent; border-radius: 11px; background: none; }
+.shot-select[aria-pressed="true"] { border-color: var(--bad); }
+.shot-select[aria-pressed="true"] img { opacity: 0.7; }
+.shot-select .tick { position: absolute; top: 4px; right: 4px; padding: 1px 6px; border-radius: 99px; background: var(--bad); color: #fff; font-size: 11px; }
+.screen.selecting { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+.select-bar { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--line); z-index: 10; }
+.select-bar button { display: block; width: 100%; max-width: 608px; margin: 0 auto; }
+button.link-danger { display: block; margin: 32px auto 0; border: none; background: none; min-height: 0; padding: 8px; color: var(--muted); font-size: 12px; text-decoration: underline; }
+.wipe-confirm { display: grid; gap: 4px; margin: 16px 0 12px; font-size: 13px; color: var(--muted); }

@@ -31,10 +31,36 @@ export async function putStone(s: Stone) {
 }
 
 export async function deleteStone(id: string) {
+  await deleteStones([id]);
+}
+
+/** 石とその写真をまとめて削除する（1つのトランザクション。途中で失敗したら何も消えない） */
+export async function deleteStones(ids: readonly string[]) {
   const d = await db();
   const tx = d.transaction(["stones", "shots"], "readwrite");
-  const keys = await tx.objectStore("shots").index("byStone").getAllKeys(id);
-  await Promise.all([...keys.map((k) => tx.objectStore("shots").delete(k)), tx.objectStore("stones").delete(id)]);
+  const shots = tx.objectStore("shots");
+  const stones = tx.objectStore("stones");
+  for (const id of ids) {
+    const keys = await shots.index("byStone").getAllKeys(id);
+    for (const k of keys) await shots.delete(k);
+    await stones.delete(id);
+  }
+  await tx.done;
+}
+
+/** 写真をまとめて削除する（1つのトランザクション） */
+export async function deleteShots(ids: readonly string[]) {
+  const d = await db();
+  const tx = d.transaction("shots", "readwrite");
+  for (const id of ids) await tx.store.delete(id);
+  await tx.done;
+}
+
+/** 石と写真をすべて削除する。学習済みモデル（localStorage）には触れない */
+export async function deleteAllData() {
+  const d = await db();
+  const tx = d.transaction(["stones", "shots"], "readwrite");
+  await Promise.all([tx.objectStore("shots").clear(), tx.objectStore("stones").clear()]);
   await tx.done;
 }
 
