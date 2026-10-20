@@ -34,6 +34,12 @@ describe("isModel", () => {
     expect(isModel({ ...m, std: m.std.map(() => NaN) })).toBe(false);
     expect(isModel(null)).toBe(false);
   });
+
+  it("rejects models trained with the experimental bg-diff segmentation", () => {
+    expect(isModel(m)).toBe(true);
+    for (const segmentation of ["bg-diff-1", "bg-diff-2", "bg-diff-3", undefined])
+      expect(isModel({ ...m, segmentation })).toBe(false);
+  });
 });
 
 describe("loadModel", () => {
@@ -77,6 +83,15 @@ describe("loadModel", () => {
     expect((await loadModel())?.source).toBe("bundled");
     stubStorage("{broken");
     expect((await loadModel())?.source).toBe("bundled");
+  });
+
+  it("ignores a bg-diff model left on this device and uses the bundled one", async () => {
+    stubStorage(JSON.stringify({ ...local, segmentation: "bg-diff-2" }));
+    stubFetch(bundled);
+    const r = await loadModel();
+    expect(r?.source).toBe("bundled");
+    expect(r?.model.nStones).toBe(19);
+    expect(r?.model.cvAccuracy).toBeCloseTo(0.842, 3);
   });
 
   it("returns null when neither is available", async () => {

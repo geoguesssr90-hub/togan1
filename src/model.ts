@@ -149,10 +149,13 @@ export function trainModel(all: StoneSamples[]): Model {
 /**
  * 読み込んだデータが、今のコードで使えるモデルかを確かめる。
  * 特徴量の数・順番（featureNames）が FEATURE_NAMES と違うモデルは、読めても誤った判定になるので受け付けない。
+ * segmentation という項目を持つモデルは、試作した別の切り出し方式（bg-diff、ブランチ bg-diff-experiment）で
+ * 学習したもので、この「明るい部分を石とする」切り出しとは特徴量の意味が違うので受け付けない。
  */
 export function isModel(v: unknown): v is Model {
   const m = v as Model;
-  if (!m || m.version !== 2 || !Array.isArray(m.grades) || m.grades.length < 2) return false;
+  if (!m || typeof m !== "object" || "segmentation" in m) return false;
+  if (m.version !== 2 || !Array.isArray(m.grades) || m.grades.length < 2) return false;
   const d = FEATURE_NAMES.length;
   const numbers = (a: unknown, n: number) =>
     Array.isArray(a) && a.length === n && a.every((x) => typeof x === "number" && Number.isFinite(x));
