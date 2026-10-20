@@ -13,22 +13,35 @@ export function worseGrade(a: string, b: string): string {
 
 export interface StoneJudgement {
   index: number;
-  box: Box; // 乾燥写真上の位置
+  box: Box; // 写真上の位置
   maybeMerged: boolean;
   grade: string;
   prob: number;
 }
 
+/** 1枚の写真から切り出した石を、それぞれ判定する */
+export function judgeStones(model: Model, stones: SegmentedStone[]): StoneJudgement[] {
+  return stones.map((s) => {
+    const top = predict(model, s.features).reduce((p, q) => (q.prob > p.prob ? q : p));
+    return { index: s.index, box: s.box, maybeMerged: s.maybeMerged, grade: top.grade, prob: top.prob };
+  });
+}
+
+export interface PairedRow {
+  index: number;
+  front: StoneJudgement;
+  back: StoneJudgement | null; // 裏を撮らなかった場合 null
+  overall: string; // 表と裏のうち悪い方の等級
+}
+
 /**
- * 同じ面の乾燥・湿潤写真から切り出した石を番号順に対応させて判定する。
- * 石はその場で濡らす前提なので、番号が同じなら同じ石とみなす。数が違えば対応が取れないので null。
+ * 表と裏を番号順に対応させる。石はその場で裏返す前提なので、番号が同じなら同じ石とみなす。
+ * 裏がない（null）ときは表だけで総合を出す。石の数が違えば対応が取れないので null。
  */
-export function judgeSide(model: Model, dry: SegmentedStone[], wet: SegmentedStone[]): StoneJudgement[] | null {
-  if (dry.length === 0 || dry.length !== wet.length) return null;
-  return dry.map((d, k) => {
-    const w = wet[k];
-    const probs = predict(model, d.features, w.features);
-    const top = probs.reduce((p, q) => (q.prob > p.prob ? q : p));
-    return { index: d.index, box: d.box, maybeMerged: d.maybeMerged || w.maybeMerged, grade: top.grade, prob: top.prob };
+export function pairSides(front: StoneJudgement[], back: StoneJudgement[] | null): PairedRow[] | null {
+  if (back && back.length !== front.length) return null;
+  return front.map((f, k) => {
+    const b = back ? back[k] : null;
+    return { index: f.index, front: f, back: b, overall: b ? worseGrade(f.grade, b.grade) : f.grade };
   });
 }

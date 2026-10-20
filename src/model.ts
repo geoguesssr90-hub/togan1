@@ -3,10 +3,10 @@
  * データが少ない段階でも学習でき、どの特徴が効いたかを説明しやすい。
  * データが増えたら CNN に置き換える想定（入出力の形はそのまま使える）。
  */
-import { PAIR_FEATURE_NAMES, pairVector, type StoneFeatures } from "./features";
+import { FEATURE_NAMES, featureVector, type StoneFeatures } from "./features";
 
 export interface Model {
-  version: 1;
+  version: 2;
   grades: string[];
   featureNames: string[];
   mean: number[];
@@ -15,7 +15,7 @@ export interface Model {
   bias: number[];
   trainedAt: number;
   nStones: number;
-  nPairs: number;
+  nPhotos: number; // 学習に使った写真（サンプル）の数
   cvAccuracy: number | null; // 石を1個ずつ抜いて検証した正解率
 }
 
@@ -23,20 +23,18 @@ export interface StoneSamples {
   stoneId: string;
   grade: string;
   dry: StoneFeatures[];
-  wet: StoneFeatures[];
 }
 
-const MAX_PAIRS_PER_STONE = 25;
+const MAX_PHOTOS_PER_STONE = 25;
 
-/** 石ごとに乾燥×湿潤の組を作る（多すぎる石が支配しないよう上限あり） */
-export function buildPairs(stones: StoneSamples[]): { X: number[][]; y: string[]; stoneIds: string[] } {
+/** 乾燥写真1枚を1サンプルにする（写真の多い石が支配しないよう、石ごとに上限あり） */
+export function buildSamples(stones: StoneSamples[]): { X: number[][]; y: string[]; stoneIds: string[] } {
   const X: number[][] = [], y: string[] = [], stoneIds: string[] = [];
   for (const s of stones) {
-    const pairs: number[][] = [];
-    for (const d of s.dry) for (const w of s.wet) pairs.push(pairVector(d, w));
-    const step = Math.max(1, pairs.length / MAX_PAIRS_PER_STONE);
-    for (let k = 0; k < pairs.length; k += step) {
-      X.push(pairs[Math.floor(k)]);
+    // 等間隔に間引く（刻み幅を足し続けると誤差で上限を1枚超えることがあるので、回数で数える）
+    const n = Math.min(s.dry.length, MAX_PHOTOS_PER_STONE);
+    for (let k = 0; k < n; k++) {
+      X.push(featureVector(s.dry[Math.floor((k * s.dry.length) / n)]));
       y.push(s.grade);
       stoneIds.push(s.stoneId);
     }
@@ -100,23 +98,23 @@ export function predictVector(m: Pick<Model, "mean" | "std" | "W" | "bias">, x: 
   return softmax(m.W.map((w, c) => m.bias[c] + w.reduce((s, wj, j) => s + wj * z[j], 0)));
 }
 
-export function predict(model: Model, dry: StoneFeatures, wet: StoneFeatures): { grade: string; prob: number }[] {
-  const p = predictVector(model, pairVector(dry, wet));
+export function predict(model: Model, dry: StoneFeatures): { grade: string; prob: number }[] {
+  const p = predictVector(model, featureVector(dry));
   return model.grades.map((grade, i) => ({ grade, prob: p[i] }));
 }
 
-/** 学習に使える石（乾燥・湿潤が両方ある）と等級の数を確認 */
+/** 学習に使える石（乾燥写真がある） */
 export function usableStones(stones: StoneSamples[]): StoneSamples[] {
-  return stones.filter((s) => s.dry.length > 0 && s.wet.length > 0);
+  return stones.filter((s) => s.dry.length > 0);
 }
 
 export function trainModel(all: StoneSamples[]): Model {
   const stones = usableStones(all);
   const grades = [...new Set(stones.map((s) => s.grade))].sort();
   if (grades.length < 2) {
-    throw new Error("乾燥と湿潤の両方が撮れている石が、2つ以上の等級で必要です");
+    throw new Error("乾燥写真のある石が、2つ以上の等級で必要です");
   }
-  const { X, y } = buildPairs(stones);
+  const { X, y } = buildSamples(stones);
   const fitted = fitModel(X, y, grades);
 
   // 石を1個ずつ抜いて学習→その石を判定（同じ石が学習と検証の両方に入らない）
@@ -125,10 +123,10 @@ export function trainModel(all: StoneSamples[]): Model {
     const rest = stones.filter((s) => s !== held);
     const restGrades = new Set(rest.map((s) => s.grade));
     if (restGrades.size < 2 || !restGrades.has(held.grade)) continue;
-    const tr = buildPairs(rest);
+    const tr = buildSamples(rest);
     const m = fitModel(tr.X, tr.y, grades);
-    // 石単位: その石の全ペアの確率を平均して判定
-    const te = buildPairs([held]);
+    // 石単位: その石の全写真の確率を平均して判定
+    const te = buildSamples([held]);
     const avg = new Array(grades.length).fill(0);
     for (const x of te.X) predictVector(m, x).forEach((p, i) => (avg[i] += p / te.X.length));
     const guess = grades[avg.indexOf(Math.max(...avg))];
@@ -137,18 +135,18 @@ export function trainModel(all: StoneSamples[]): Model {
   }
 
   return {
-    version: 1,
+    version: 2,
     grades,
-    featureNames: PAIR_FEATURE_NAMES,
+    featureNames: FEATURE_NAMES,
     ...fitted,
     trainedAt: Date.now(),
     nStones: stones.length,
-    nPairs: X.length,
+    nPhotos: X.length,
     cvAccuracy: total ? correct / total : null,
   };
 }
 
 export function isModel(v: unknown): v is Model {
   const m = v as Model;
-  return !!m && m.version === 1 && Array.isArray(m.grades) && Array.isArray(m.W) && m.W.length === m.grades.length;
+  return !!m && m.version === 2 && Array.isArray(m.grades) && Array.isArray(m.W) && m.W.length === m.grades.length;
 }

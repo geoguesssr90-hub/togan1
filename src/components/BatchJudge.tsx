@@ -1,33 +1,28 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { analyzeBatchBlob, type BatchAnalysis } from "../analyze";
-import { judgeSide, worseGrade, type StoneJudgement } from "../batch";
+import { judgeStones, pairSides, type PairedRow, type StoneJudgement } from "../batch";
 import type { Captured } from "../capture";
 import type { Box } from "../features";
 import type { Model } from "../model";
 import { Camera } from "./Camera";
 
-/**
- * 撮影の順番。濡らした石を乾かさずに済むよう、乾燥を先に撮ってから濡らす:
- * 表・乾燥 → 裏返して 裏・乾燥 → 濡らして 裏・湿潤 → 裏返して濡らし 表・湿潤
- */
-type PhotoKey = "frontDry" | "backDry" | "backWet" | "frontWet";
+/** 撮影の順番: 表 → その場で裏返して 裏（省略可）→ 結果 */
+type PhotoKey = "front" | "back";
 type Step = PhotoKey | "analyzing" | "result";
 
-const STEP_LABEL: Record<PhotoKey, string> = { frontDry: "表 乾燥", backDry: "裏 乾燥", backWet: "裏 湿潤", frontWet: "表 湿潤" };
-const PHOTO_LABEL: Record<PhotoKey, string> = { frontDry: "表（乾燥）", backDry: "裏（乾燥）", backWet: "裏（湿潤）", frontWet: "表（湿潤）" };
-const ORDER: PhotoKey[] = ["frontDry", "backDry", "backWet", "frontWet"];
+const SIDE_NAME: Record<PhotoKey, string> = { front: "表", back: "裏" };
 
 interface Side {
-  name: "表" | "裏";
-  photo: Captured; // 乾燥写真（結果の表示に使う）
-  dry: BatchAnalysis;
-  wet: BatchAnalysis;
-  judged: StoneJudgement[] | null; // 乾燥と湿潤で石の数が合わなければ null
+  name: string;
+  photo: Captured;
+  analysis: BatchAnalysis;
+  judged: StoneJudgement[];
 }
 
 interface Result {
   front: Side;
   back: Side | null; // 裏を撮らなかった場合 null
+  rows: PairedRow[] | null; // 表と裏で石の数が合わなければ null
   warnings: string[];
 }
 
@@ -39,42 +34,22 @@ interface Props {
 
 /** まとめて判定: 暗い背景に並べた複数の石を1枚で撮り、1個ずつ切り出して判定する */
 export function BatchJudge({ model, onBack, modeSwitch }: Props) {
-  const [step, setStep] = useState<Step>("frontDry");
-  const [photos, setPhotos] = useState<Partial<Record<PhotoKey, Captured>>>({});
-  const [skipBack, setSkipBack] = useState(false);
+  const [step, setStep] = useState<Step>("front");
+  const [front, setFront] = useState<Captured | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState<string | null>(null);
   const urlsRef = useRef<string[]>([]);
 
   useEffect(() => () => urlsRef.current.forEach((u) => URL.revokeObjectURL(u)), []);
 
-  function nextStep(key: PhotoKey, skip: boolean): PhotoKey | null {
-    const rest = ORDER.slice(ORDER.indexOf(key) + 1).filter((k) => !(skip && (k === "backDry" || k === "backWet")));
-    return rest[0] ?? null;
-  }
-
-  function prevStep(key: PhotoKey): PhotoKey | null {
-    const before = ORDER.slice(0, ORDER.indexOf(key)).filter((k) => !(skipBack && (k === "backDry" || k === "backWet")));
-    return before[before.length - 1] ?? null;
-  }
-
-  function onCaptured(key: PhotoKey, c: Captured) {
-    urlsRef.current.push(c.previewUrl);
-    const next = { ...photos, [key]: c };
-    setPhotos(next);
-    const n = nextStep(key, skipBack);
-    if (n) setStep(n);
-    else analyze(next);
-  }
-
-  async function analyze(p: Partial<Record<PhotoKey, Captured>>) {
+  async function analyze(f: Captured, b: Captured | null) {
     setStep("analyzing");
     setError(null);
     try {
       // スマホのメモリを考えて1枚ずつ解析する
-      const a: Partial<Record<PhotoKey, BatchAnalysis>> = {};
-      for (const k of ORDER) if (p[k]) a[k] = await analyzeBatchBlob(p[k]!.blob);
-      setResult(buildResult(model, p, a));
+      const fa = await analyzeBatchBlob(f.blob);
+      const ba = b ? await analyzeBatchBlob(b.blob) : null;
+      setResult(buildResult(model, f, fa, b, ba));
       setStep("result");
     } catch {
       setError("画像を解析できませんでした。撮り直してください。");
@@ -82,11 +57,18 @@ export function BatchJudge({ model, onBack, modeSwitch }: Props) {
     }
   }
 
+  function onCaptured(key: PhotoKey, c: Captured) {
+    urlsRef.current.push(c.previewUrl);
+    if (key === "front") {
+      setFront(c);
+      setStep("back");
+    } else analyze(front!, c);
+  }
+
   function restart() {
-    setPhotos({});
-    setSkipBack(false);
+    setFront(null);
     setResult(null);
-    setStep("frontDry");
+    setStep("front");
   }
 
   if (step === "analyzing") return <div className="screen"><p className="meta">石を切り出して判定中…</p></div>;
@@ -94,45 +76,29 @@ export function BatchJudge({ model, onBack, modeSwitch }: Props) {
   if (step === "result" && result) return <BatchResult result={result} model={model} onBack={onBack} onRestart={restart} />;
 
   const key = step as PhotoKey;
-  const hint: Record<PhotoKey, string> = {
-    frontDry: "乾いた石を暗い背景に、触れないよう隙間をあけて並べ、全体を撮影してください（基準カードは写さない）",
-    backDry: "石をその場で裏返し、乾いた状態で撮影してください",
-    backWet: "石を動かさずに水で濡らし、同じ位置から撮影してください",
-    frontWet: skipBack
-      ? "石を動かさずに水で濡らし、同じ位置から撮影してください"
-      : "石をその場で裏返して表を上にし、水で濡らして撮影してください",
-  };
-  const steps = ORDER.filter((k) => !(skipBack && (k === "backDry" || k === "backWet")));
-
+  const isFront = key === "front";
   return (
     <div className="screen camera-screen">
-      {key === "frontDry" && modeSwitch}
-      <div className="judge-steps" style={{ gridTemplateColumns: `repeat(${steps.length + 1}, 1fr)` }}>
-        {steps.map((k) => (
-          <span key={k} className={k === key ? "on" : photos[k] ? "done" : ""}>{STEP_LABEL[k]}</span>
-        ))}
-        <span>結果</span>
+      {isFront && modeSwitch}
+      <div className="judge-steps">
+        <span className={isFront ? "on" : "done"}>1 表</span>
+        <span className={isFront ? "" : "on"}>2 裏</span>
+        <span>3 結果</span>
       </div>
       {error && <p className="warnings bad">{error}</p>}
       <Camera
         key={key}
         showGuide={false}
-        hint={hint[key]}
+        hint={
+          isFront
+            ? "暗い背景に、石どうしが触れないよう隙間をあけて並べ、全体を撮影してください（基準カードは写さない）"
+            : "石をその場で裏返し、同じ位置から撮影してください"
+        }
         onCaptured={(c) => onCaptured(key, c)}
-        onCancel={() => {
-          const p = prevStep(key);
-          if (p) setStep(p);
-          else onBack();
-        }}
+        onCancel={() => (isFront ? onBack() : setStep("front"))}
       />
-      {key === "backDry" && (
-        <button
-          className="ghost wide skip-back"
-          onClick={() => {
-            setSkipBack(true);
-            setStep("frontWet");
-          }}
-        >
+      {!isFront && (
+        <button className="ghost wide skip-back" onClick={() => analyze(front!, null)}>
           裏は撮らない
         </button>
       )}
@@ -140,49 +106,32 @@ export function BatchJudge({ model, onBack, modeSwitch }: Props) {
   );
 }
 
-function buildResult(
-  model: Model,
-  p: Partial<Record<PhotoKey, Captured>>,
-  a: Partial<Record<PhotoKey, BatchAnalysis>>,
-): Result {
+function buildResult(model: Model, f: Captured, fa: BatchAnalysis, b: Captured | null, ba: BatchAnalysis | null): Result {
   const warnings: string[] = [];
-  for (const k of ORDER) {
-    const an = a[k];
-    if (!an) continue;
-    if (an.stones.length === 0) warnings.push(`${PHOTO_LABEL[k]}の写真で石が見つかりませんでした。暗い背景の上で撮り直してください。`);
-    const merged = an.stones.filter((s) => s.maybeMerged).map((s) => `${s.index}番`);
+  const side = (key: PhotoKey, photo: Captured, analysis: BatchAnalysis): Side => {
+    const name = SIDE_NAME[key];
+    if (analysis.stones.length === 0) warnings.push(`${name}の写真で石が見つかりませんでした。暗い背景の上で撮り直してください。`);
+    const merged = analysis.stones.filter((s) => s.maybeMerged).map((s) => `${s.index}番`);
     if (merged.length)
-      warnings.push(`${PHOTO_LABEL[k]}の ${merged.join("・")} は、石どうしがくっついている可能性があります。隙間をあけて撮り直してください。`);
-  }
-
-  const side = (name: "表" | "裏", dk: PhotoKey, wk: PhotoKey): Side | null => {
-    const photo = p[dk], dry = a[dk], wet = a[wk];
-    if (!photo || !dry || !wet) return null;
-    const judged = judgeSide(model, dry.stones, wet.stones);
-    if (!judged && dry.stones.length > 0 && wet.stones.length > 0)
-      warnings.push(
-        `${name}の乾燥（${dry.stones.length}個）と湿潤（${wet.stones.length}個）で石の数が合わないため、${name}は判定できませんでした。`,
-      );
-    return { name, photo, dry, wet, judged };
+      warnings.push(`${name}の ${merged.join("・")} は、石どうしがくっついている可能性があります。隙間をあけて撮り直してください。`);
+    return { name, photo, analysis, judged: judgeStones(model, analysis.stones) };
   };
-  const front = side("表", "frontDry", "frontWet")!;
-  const back = side("裏", "backDry", "backWet");
-  if (front.judged && back?.judged && front.judged.length !== back.judged.length)
+  const front = side("front", f, fa);
+  const back = b && ba ? side("back", b, ba) : null;
+  const rows = pairSides(front.judged, back?.judged ?? null);
+  if (!rows && back)
     warnings.push(
       `表（${front.judged.length}個）と裏（${back.judged.length}個）で石の数が合わないため、表と裏を対応させられませんでした。別々に表示します。`,
     );
-  return { front, back, warnings };
+  return { front, back, rows, warnings };
 }
 
-function fmt(j: StoneJudgement | undefined) {
+function fmt(j: StoneJudgement | null) {
   return j ? `${j.grade}等級（${Math.round(j.prob * 100)}%）` : "—";
 }
 
 function BatchResult({ result, model, onBack, onRestart }: { result: Result; model: Model; onBack: () => void; onRestart: () => void }) {
-  const { front, back, warnings } = result;
-  const fj = front.judged, bj = back?.judged ?? null;
-  // 表と裏を番号で対応させられるか（裏を撮っていなければ表だけで総合を出す）
-  const matched = !!fj && (!back || (!!bj && bj.length === fj.length));
+  const { front, back, rows, warnings } = result;
 
   return (
     <div className="screen">
@@ -197,27 +146,27 @@ function BatchResult({ result, model, onBack, onRestart }: { result: Result; mod
 
       {[front, back].map((s) => s && <SideOverlay key={s.name} side={s} />)}
 
-      {matched ? (
-        <table className="summary batch-table">
-          <thead><tr><th>番号</th><th>表</th><th>裏</th><th>総合</th></tr></thead>
-          <tbody>
-            {fj!.map((f, k) => {
-              const b = bj?.[k];
-              return (
-                <tr key={f.index}>
-                  <td>{f.index}</td>
-                  <td>{fmt(f)}</td>
-                  <td>{fmt(b)}</td>
-                  <td className="overall">{b ? worseGrade(f.grade, b.grade) : f.grade}等級</td>
+      {rows ? (
+        rows.length > 0 && (
+          <table className="summary batch-table">
+            <thead><tr><th>番号</th><th>表</th><th>裏</th><th>総合</th></tr></thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.index}>
+                  <td>{r.index}</td>
+                  <td>{fmt(r.front)}</td>
+                  <td>{fmt(r.back)}</td>
+                  <td className="overall">{r.overall}等級</td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              ))}
+            </tbody>
+          </table>
+        )
       ) : (
         [front, back].map(
           (s) =>
-            s?.judged && (
+            s &&
+            s.judged.length > 0 && (
               <section key={s.name}>
                 <h3>{s.name}</h3>
                 <table className="summary batch-table">
@@ -250,13 +199,11 @@ interface Mark {
   warn: boolean;
 }
 
-/** 乾燥写真に、各石の枠・番号・判定等級を重ねて描く */
+/** 写真に、各石の枠・番号・判定等級を重ねて描く */
 function SideOverlay({ side }: { side: Side }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const { width, height } = side.dry;
-  const marks: Mark[] = side.judged
-    ? side.judged.map((j) => ({ box: j.box, text: `${j.index}  ${j.grade}等級`, warn: j.maybeMerged }))
-    : side.dry.stones.map((s) => ({ box: s.box, text: `${s.index}`, warn: s.maybeMerged }));
+  const { width, height } = side.analysis;
+  const marks: Mark[] = side.judged.map((j) => ({ box: j.box, text: `${j.index}  ${j.grade}等級`, warn: j.maybeMerged }));
 
   useEffect(() => {
     let cancelled = false;
@@ -294,7 +241,7 @@ function SideOverlay({ side }: { side: Side }) {
   return (
     <figure className="batch-figure">
       <canvas ref={ref} aria-label={`${side.name}の判定結果`} />
-      <figcaption>{side.name}（乾燥）</figcaption>
+      <figcaption>{side.name}</figcaption>
     </figure>
   );
 }

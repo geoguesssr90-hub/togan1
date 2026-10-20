@@ -6,7 +6,7 @@
  *   黄み・褐色  → b*（黄-青）、a*（赤-緑）の平均
  *   縞・ムラ    → L* のばらつき、きめ（ラプラシアン）
  *   鉄斑        → 周囲より暗い点の割合
- *   濡らすと褐色化 → 湿潤と乾燥の差（pairVector で計算）
+ * 写真は乾燥状態のみを使う。
  */
 
 export interface StoneFeatures {
@@ -299,17 +299,9 @@ export function segmentStones(rgba: Uint8ClampedArray, width: number, height: nu
   return { stones, labels, threshold };
 }
 
-/** 乾燥・湿潤の1組から、モデルに入れるベクトルを作る */
-export const PAIR_FEATURE_NAMES = [
-  "乾燥 L*", "乾燥 a*", "乾燥 b*", "乾燥 L*ばらつき", "乾燥 斑点率", "乾燥 きめ",
-  "湿潤 L*", "湿潤 a*", "湿潤 b*", "湿潤 斑点率",
-  "濡らした時の明度変化", "濡らした時の黄み変化",
-];
+/** 乾燥写真1枚から、モデルに入れるベクトルを作る（FEATURE_NAMES と同じ順） */
+export const FEATURE_NAMES = ["L*", "a*", "b*", "L*ばらつき", "斑点率", "きめ"];
 
-export function pairVector(dry: StoneFeatures, wet: StoneFeatures): number[] {
-  return [
-    dry.L, dry.a, dry.b, dry.Lstd, dry.spotRatio, dry.texture,
-    wet.L, wet.a, wet.b, wet.spotRatio,
-    wet.L - dry.L, wet.b - dry.b,
-  ];
+export function featureVector(f: StoneFeatures): number[] {
+  return [f.L, f.a, f.b, f.Lstd, f.spotRatio, f.texture];
 }

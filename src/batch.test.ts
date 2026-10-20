@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { worseGrade } from "./batch";
+import { pairSides, worseGrade, type StoneJudgement } from "./batch";
 import { segmentStones } from "./features";
 
 type Circle = [cx: number, cy: number, r: number];
@@ -57,6 +57,30 @@ describe("segmentStones", () => {
   it("returns no stones for an empty background", () => {
     const w = 100, h = 80;
     expect(segmentStones(circles(w, h, []), w, h).stones).toEqual([]);
+  });
+});
+
+function judged(grades: string[]): StoneJudgement[] {
+  return grades.map((grade, k) => ({ index: k + 1, box: { x0: 0, y0: 0, x1: 1, y1: 1 }, maybeMerged: false, grade, prob: 0.8 }));
+}
+
+describe("pairSides", () => {
+  it("pairs front and back by number and takes the worse grade", () => {
+    const rows = pairSides(judged(["2", "3", "4"]), judged(["3", "3", "2"]))!;
+    expect(rows.map((r) => [r.index, r.front.grade, r.back?.grade, r.overall])).toEqual([
+      [1, "2", "3", "3"],
+      [2, "3", "3", "3"],
+      [3, "4", "2", "4"],
+    ]);
+  });
+
+  it("uses the front only when the back was skipped", () => {
+    const rows = pairSides(judged(["2", "4"]), null)!;
+    expect(rows.map((r) => [r.back, r.overall])).toEqual([[null, "2"], [null, "4"]]);
+  });
+
+  it("cannot pair when the stone counts differ", () => {
+    expect(pairSides(judged(["2", "3"]), judged(["2"]))).toBeNull();
   });
 });
 

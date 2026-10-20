@@ -5,7 +5,7 @@ import { predict, type Model } from "../model";
 import { BatchJudge } from "./BatchJudge";
 import { Camera } from "./Camera";
 
-type Step = "dry" | "wet" | "analyzing" | "result";
+type Step = "capture" | "analyzing" | "result";
 
 interface Shot {
   captured: Captured;
@@ -59,84 +59,67 @@ interface ModeProps {
   modeSwitch: ReactNode;
 }
 
-/** 1個ずつ: 乾燥 → 湿潤 → 結果 */
+/** 1個ずつ: 乾燥写真を1枚撮る → 結果 */
 function SingleJudge({ model, onBack, modeSwitch }: ModeProps) {
-  const [step, setStep] = useState<Step>("dry");
-  const [dry, setDry] = useState<Shot | null>(null);
-  const [wet, setWet] = useState<Shot | null>(null);
+  const [step, setStep] = useState<Step>("capture");
+  const [shot, setShot] = useState<Shot | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(
     () => () => {
-      if (dry) URL.revokeObjectURL(dry.captured.previewUrl);
-      if (wet) URL.revokeObjectURL(wet.captured.previewUrl);
+      if (shot) URL.revokeObjectURL(shot.captured.previewUrl);
     },
-    [dry, wet],
+    [shot],
   );
 
-  async function onWet(c: Captured) {
-    const w: Shot = { captured: c };
-    setWet(w);
+  async function onCaptured(c: Captured) {
+    setShot({ captured: c });
     setStep("analyzing");
     setError(null);
     try {
-      const [da, wa] = await Promise.all([analyzeBlob(dry!.captured.blob, true), analyzeBlob(c.blob, true)]);
-      setDry({ ...dry!, analysis: da });
-      setWet({ ...w, analysis: wa });
+      const analysis = await analyzeBlob(c.blob, true);
+      setShot({ captured: c, analysis });
       setStep("result");
     } catch {
       setError("画像を解析できませんでした。撮り直してください。");
-      setStep("dry");
+      setStep("capture");
     }
   }
 
   function restart() {
-    setDry(null);
-    setWet(null);
-    setStep("dry");
+    setShot(null);
+    setStep("capture");
   }
 
-  if (step === "dry" || step === "wet") {
-    const isDry = step === "dry";
+  if (step === "capture") {
     return (
       <div className="screen camera-screen">
-        {isDry && modeSwitch}
-        <div className="judge-steps">
-          <span className={isDry ? "on" : "done"}>1 乾燥</span>
-          <span className={!isDry ? "on" : ""}>2 湿潤</span>
-          <span>3 結果</span>
+        {modeSwitch}
+        <div className="judge-steps" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
+          <span className="on">1 撮影</span>
+          <span>2 結果</span>
         </div>
         {error && <p className="warnings bad">{error}</p>}
-        <Camera
-          hint={isDry ? "乾いた状態の石を撮影してください" : "同じ面を水で濡らして撮影してください"}
-          onCaptured={(c) => {
-            if (isDry) {
-              setDry({ captured: c });
-              setStep("wet");
-            } else onWet(c);
-          }}
-          onCancel={() => (isDry ? onBack() : setStep("dry"))}
-        />
+        <Camera hint="乾いた状態の石を撮影してください" onCaptured={onCaptured} onCancel={onBack} />
       </div>
     );
   }
 
-  if (step === "analyzing" || !dry?.analysis || !wet?.analysis) {
+  if (step === "analyzing" || !shot?.analysis) {
     return <div className="screen"><p className="meta">解析中…</p></div>;
   }
 
-  const df = dry.analysis.features;
-  const wf = wet.analysis.features;
-  const lowArea = df.areaRatio < 0.03 || wf.areaRatio < 0.03;
-  const probs = predict(model, df, wf);
+  const f = shot.analysis.features;
+  const lowArea = f.areaRatio < 0.03;
+  const probs = predict(model, f);
   const top = probs.reduce((p, q) => (q.prob > p.prob ? q : p));
 
-  const rows: [string, string, string][] = [
-    ["白さ（L*）", df.L.toFixed(1), wf.L.toFixed(1)],
-    ["黄み（b*）", df.b.toFixed(1), wf.b.toFixed(1)],
-    ["赤み（a*）", df.a.toFixed(1), wf.a.toFixed(1)],
-    ["ムラ（L*のばらつき）", df.Lstd.toFixed(1), wf.Lstd.toFixed(1)],
-    ["暗い斑点の割合", pct(df.spotRatio), pct(wf.spotRatio)],
+  const rows: [string, string][] = [
+    ["白さ（L*）", f.L.toFixed(1)],
+    ["黄み（b*）", f.b.toFixed(1)],
+    ["赤み（a*）", f.a.toFixed(1)],
+    ["ムラ（L*のばらつき）", f.Lstd.toFixed(1)],
+    ["暗い斑点の割合", pct(f.spotRatio)],
   ];
 
   return (
@@ -162,19 +145,14 @@ function SingleJudge({ model, onBack, modeSwitch }: ModeProps) {
 
       <h3>判定の根拠</h3>
       <table className="summary">
-        <thead><tr><th>項目</th><th>乾燥</th><th>湿潤</th></tr></thead>
+        <thead><tr><th>項目</th><th>値</th></tr></thead>
         <tbody>
-          {rows.map(([k, a, b]) => <tr key={k}><td>{k}</td><td>{a}</td><td>{b}</td></tr>)}
-          <tr className="emph"><td>濡らした時の明度変化</td><td colSpan={2}>{signed(wf.L - df.L)}</td></tr>
-          <tr className="emph"><td>濡らした時の黄み変化（褐色化）</td><td colSpan={2}>{signed(wf.b - df.b)}</td></tr>
+          {rows.map(([k, v]) => <tr key={k}><td>{k}</td><td>{v}</td></tr>)}
         </tbody>
       </table>
 
       <h3>石として認識した範囲</h3>
-      <div className="mask-pair">
-        <figure><img src={dry.analysis.maskPreview} alt="乾燥の認識範囲" /><figcaption>乾燥</figcaption></figure>
-        <figure><img src={wet.analysis.maskPreview} alt="湿潤の認識範囲" /><figcaption>湿潤</figcaption></figure>
-      </div>
+      <img className="mask-one" src={shot.analysis.maskPreview} alt="石として認識した範囲" />
       <p className="tip">
         色の付いた部分だけを使って判定しています。影や背景に色が付いている場合は、撮り方を見直してください。
       </p>
@@ -191,7 +169,4 @@ function SingleJudge({ model, onBack, modeSwitch }: ModeProps) {
 
 function pct(v: number) {
   return (v * 100).toFixed(1) + "%";
-}
-function signed(v: number) {
-  return (v >= 0 ? "+" : "") + v.toFixed(1);
 }

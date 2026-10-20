@@ -2,7 +2,7 @@
 export const GRADES = ["1", "2", "3", "4", "5"] as const;
 export type Grade = (typeof GRADES)[number];
 
-/** 撮影条件。乾燥と湿潤の色差（褐色化）が判定の手がかりになる。 */
+/** 撮影条件。現在は乾燥のみ撮影する。"wet" は以前に撮った写真との互換のため残している。 */
 export type Condition = "dry" | "wet";
 export const CONDITION_LABEL: Record<Condition, string> = { dry: "乾燥", wet: "湿潤" };
 

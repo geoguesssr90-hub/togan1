@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { extractFeatures, otsu, rgbToLab, type StoneFeatures } from "./features";
-import { buildPairs, isModel, predict, trainModel, type StoneSamples } from "./model";
+import { featureVector, FEATURE_NAMES } from "./features";
+import { buildSamples, isModel, predict, trainModel, type StoneSamples } from "./model";
 
 /** 灰色の背景(110)に、明るい石(stone)と左の影(30)を描いた画像 */
 function scene(w: number, h: number, stone: [number, number, number]) {
@@ -53,11 +54,10 @@ function f(L: number, b: number, jitter: number): StoneFeatures {
   return { L: L + jitter, a: 1, b: b - jitter, Lstd: 3, spotRatio: 0.01, texture: 2, areaRatio: 0.3 };
 }
 
-function stone(id: string, grade: string, L: number, b: number): StoneSamples {
-  // 等級が上がるほど暗く・黄色く、濡らすと褐色化が大きい
-  const dry = [0, 0.5, -0.5].map((j) => f(L, b, j));
-  const wet = [0, 0.4].map((j) => f(L - 8 - (b / 2), b + b / 2, j));
-  return { stoneId: id, grade, dry, wet };
+function stone(id: string, grade: string, L: number, b: number, n = 3): StoneSamples {
+  // 等級が上がるほど暗く・黄色い
+  const dry = Array.from({ length: n }, (_, k) => f(L, b, (k % 3) * 0.5 - 0.5));
+  return { stoneId: id, grade, dry };
 }
 
 describe("model", () => {
@@ -66,10 +66,17 @@ describe("model", () => {
   for (const [grade, L, b] of [["2", 90, 4], ["3", 82, 10], ["4", 74, 16]] as const)
     for (let i = 0; i < 4; i++) data.push(stone(`S${++k}`, grade, L + i * 0.7, b + i * 0.3));
 
-  it("pairs are dry x wet per stone", () => {
-    const { X, stoneIds } = buildPairs([data[0]]);
-    expect(X.length).toBe(6);
+  it("feature vector has the six dry features in FEATURE_NAMES order", () => {
+    const v = featureVector(data[0].dry[0]);
+    expect(v.length).toBe(FEATURE_NAMES.length);
+    expect(v).toEqual([89.5, 1, 4.5, 3, 0.01, 2]);
+  });
+
+  it("one sample per dry photo, capped at 25 per stone", () => {
+    const { X, stoneIds } = buildSamples([data[0]]);
+    expect(X.length).toBe(3);
     expect(new Set(stoneIds)).toEqual(new Set(["S1"]));
+    expect(buildSamples([stone("big", "2", 90, 4, 60)]).X.length).toBe(25);
   });
 
   it("trains, cross-validates by stone, and predicts", () => {
@@ -78,14 +85,22 @@ describe("model", () => {
     expect(m.grades).toEqual(["2", "3", "4"]);
     expect(m.nStones).toBe(12);
     expect(m.cvAccuracy).toBeGreaterThanOrEqual(0.9);
-    const p = predict(m, data[0].dry[0], data[0].wet[0]);
+    expect(m.version).toBe(2);
+    expect(m.nPhotos).toBe(36);
+    const p = predict(m, data[0].dry[0]);
     expect(p.reduce((s, q) => s + q.prob, 0)).toBeCloseTo(1, 5);
     expect(p.reduce((a, b) => (b.prob > a.prob ? b : a)).grade).toBe("2");
     expect(JSON.parse(JSON.stringify(m))).toEqual(m); // JSONで保存できる
   });
 
-  it("needs two grades with dry and wet", () => {
-    expect(() => trainModel([data[0], data[1]])).toThrow();
-    expect(() => trainModel([data[0], { ...data[8], wet: [] }])).toThrow();
+  it("needs dry photos in two grades", () => {
+    expect(() => trainModel([data[0], data[1]])).toThrow("乾燥写真のある石が、2つ以上の等級で必要です");
+    expect(() => trainModel([data[0], { ...data[8], dry: [] }])).toThrow();
+  });
+
+  it("accepts only version 2 models", () => {
+    const m = trainModel(data);
+    expect(isModel(m)).toBe(true);
+    expect(isModel({ ...m, version: 1 })).toBe(false);
   });
 });

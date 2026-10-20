@@ -22,13 +22,8 @@
 .prob.top { font-weight: 600; }
 .prob-val { text-align: right; }
 
-.summary tr.emph td { font-weight: 600; }
-.summary td[colspan] { text-align: right; }
 
-.mask-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.mask-pair figure { margin: 0; }
-.mask-pair img { width: 100%; border-radius: 8px; display: block; }
-.mask-pair figcaption { font-size: 12px; color: var(--muted); text-align: center; margin-top: 2px; }
+.mask-one { width: 100%; border-radius: 8px; display: block; }
 
 /* まとめて判定 */
 .judge-mode { margin-bottom: 10px; }

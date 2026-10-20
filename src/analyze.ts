@@ -73,11 +73,12 @@ export async function analyzeBatchBlob(blob: Blob): Promise<BatchAnalysis> {
   }
 }
 
-/** 保存済みの写真すべてから特徴量を作る（順番に処理してメモリを節約） */
+/** 保存済みの写真のうち condition が "dry" のものだけから特徴量を作る（順番に処理してメモリを節約） */
 export async function collectSamples(onProgress: (done: number, total: number) => void): Promise<StoneSamples[]> {
-  const [stones, shots] = await Promise.all([listStones(), listShots()]);
+  const [stones, allShots] = await Promise.all([listStones(), listShots()]);
+  const shots = allShots.filter((s) => s.condition === "dry");
   const byStone = new Map<string, StoneSamples>(
-    stones.map((s) => [s.id, { stoneId: s.id, grade: s.grade, dry: [], wet: [] }]),
+    stones.map((s) => [s.id, { stoneId: s.id, grade: s.grade, dry: [] }]),
   );
   let done = 0;
   for (const shot of shots) {
@@ -85,7 +86,7 @@ export async function collectSamples(onProgress: (done: number, total: number) =
     if (target) {
       try {
         const { features } = await analyzeBlob(shot.blob);
-        if (features.areaRatio > 0.01) target[shot.condition].push(features);
+        if (features.areaRatio > 0.01) target.dry.push(features);
       } catch {
         /* 読めない画像は飛ばす */
       }
@@ -95,7 +96,7 @@ export async function collectSamples(onProgress: (done: number, total: number) =
   return [...byStone.values()];
 }
 
-const KEY = "togan-model-v1";
+const KEY = "togan-model-v2";
 
 export function saveModel(m: Model) {
   try {
