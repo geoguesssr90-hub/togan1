@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { analyzeBlob, loadModel, type Analysis } from "../analyze";
 import type { Captured } from "../capture";
 import { predict, type Model } from "../model";
+import { BatchJudge } from "./BatchJudge";
 import { Camera } from "./Camera";
 
 type Step = "dry" | "wet" | "analyzing" | "result";
@@ -11,16 +12,59 @@ interface Shot {
   analysis?: Analysis;
 }
 
+type Mode = "single" | "batch";
+const MODE_LABEL: Record<Mode, string> = { single: "1個ずつ", batch: "まとめて" };
+
 export function Judge({ onBack }: { onBack: () => void }) {
   const [model, setModel] = useState<Model | null | undefined>(undefined);
-  const [step, setStep] = useState<Step>("dry");
-  const [dry, setDry] = useState<Shot | null>(null);
-  const [wet, setWet] = useState<Shot | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<Mode>("single");
 
   useEffect(() => {
     loadModel().then((r) => setModel(r?.model ?? null));
   }, []);
+
+  if (model === undefined) return <div className="screen"><p className="meta">モデルを読み込み中…</p></div>;
+
+  if (model === null) {
+    return (
+      <div className="screen">
+        <button className="back" onClick={onBack}>← 一覧</button>
+        <h2>判定</h2>
+        <p>まだ判定用のモデルがありません。一覧画面の「モデルを学習する」を先に実行してください。</p>
+      </div>
+    );
+  }
+
+  // 切り替えは各モードの最初の撮影画面にだけ出す（途中で切り替えて撮影済みの写真を失わないように）
+  const modeSwitch = (
+    <div className="seg judge-mode" role="radiogroup" aria-label="判定のしかた">
+      {(["single", "batch"] as Mode[]).map((m) => (
+        <button key={m} className={mode === m ? "on" : ""} onClick={() => setMode(m)} role="radio" aria-checked={mode === m}>
+          {MODE_LABEL[m]}
+        </button>
+      ))}
+    </div>
+  );
+
+  return mode === "single" ? (
+    <SingleJudge model={model} onBack={onBack} modeSwitch={modeSwitch} />
+  ) : (
+    <BatchJudge model={model} onBack={onBack} modeSwitch={modeSwitch} />
+  );
+}
+
+interface ModeProps {
+  model: Model;
+  onBack: () => void;
+  modeSwitch: ReactNode;
+}
+
+/** 1個ずつ: 乾燥 → 湿潤 → 結果 */
+function SingleJudge({ model, onBack, modeSwitch }: ModeProps) {
+  const [step, setStep] = useState<Step>("dry");
+  const [dry, setDry] = useState<Shot | null>(null);
+  const [wet, setWet] = useState<Shot | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(
     () => () => {
@@ -52,22 +96,11 @@ export function Judge({ onBack }: { onBack: () => void }) {
     setStep("dry");
   }
 
-  if (model === undefined) return <div className="screen"><p className="meta">モデルを読み込み中…</p></div>;
-
-  if (model === null) {
-    return (
-      <div className="screen">
-        <button className="back" onClick={onBack}>← 一覧</button>
-        <h2>判定</h2>
-        <p>まだ判定用のモデルがありません。一覧画面の「モデルを学習する」を先に実行してください。</p>
-      </div>
-    );
-  }
-
   if (step === "dry" || step === "wet") {
     const isDry = step === "dry";
     return (
       <div className="screen camera-screen">
+        {isDry && modeSwitch}
         <div className="judge-steps">
           <span className={isDry ? "on" : "done"}>1 乾燥</span>
           <span className={!isDry ? "on" : ""}>2 湿潤</span>

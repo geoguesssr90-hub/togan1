@@ -29,3 +29,11 @@
 .mask-pair figure { margin: 0; }
 .mask-pair img { width: 100%; border-radius: 8px; display: block; }
 .mask-pair figcaption { font-size: 12px; color: var(--muted); text-align: center; margin-top: 2px; }
+
+/* まとめて判定 */
+.judge-mode { margin-bottom: 10px; }
+.skip-back { margin-top: 10px; }
+.batch-figure { margin: 12px 0; }
+.batch-figure canvas { width: 100%; height: auto; display: block; border-radius: 8px; background: #000; }
+.batch-figure figcaption { font-size: 12px; color: var(--muted); text-align: center; margin-top: 2px; }
+.batch-table td.overall { font-weight: 600; }

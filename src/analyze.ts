@@ -1,5 +1,5 @@
 /** ブラウザ側: 画像Blobを縮小して特徴量を取り出す。学習時と判定時で同じ関数を使う。 */
-import { extractFeatures, type StoneFeatures } from "./features";
+import { extractFeatures, segmentStones, type SegmentedStone, type StoneFeatures } from "./features";
 import { listShots, listStones } from "./db";
 import { isModel, type Model, type StoneSamples } from "./model";
 
@@ -38,6 +38,36 @@ export async function analyzeBlob(blob: Blob, withPreview = false): Promise<Anal
     }
     ctx.putImageData(img, 0, 0);
     return { features, maskPreview: c.toDataURL("image/jpeg", 0.85) };
+  } finally {
+    bmp.close();
+  }
+}
+
+/**
+ * まとめて判定用の解析サイズ。1枚に6〜9個並べるので、1個判定（長辺400px）と
+ * 石1個あたりの画素数がおおよそ揃うように大きめにする（きめ・斑点は解像度に左右されるため）。
+ */
+const BATCH_LONG_SIDE = 1200;
+
+export interface BatchAnalysis {
+  width: number; // 解析した画像の大きさ（stones の座標はこの大きさ基準）
+  height: number;
+  stones: SegmentedStone[];
+}
+
+export async function analyzeBatchBlob(blob: Blob): Promise<BatchAnalysis> {
+  const bmp = await createImageBitmap(blob);
+  try {
+    const s = Math.min(1, BATCH_LONG_SIDE / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * s));
+    const h = Math.max(1, Math.round(bmp.height * s));
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext("2d", { willReadFrequently: true })!;
+    ctx.drawImage(bmp, 0, 0, w, h);
+    const { stones } = segmentStones(ctx.getImageData(0, 0, w, h).data, w, h);
+    return { width: w, height: h, stones };
   } finally {
     bmp.close();
   }
