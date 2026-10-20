@@ -1,17 +1,24 @@
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Home } from "./components/Home";
+import { Judge } from "./components/Judge";
 import { StoneDetail } from "./components/StoneDetail";
 import { requestPersistence } from "./db";
 import type { Stone } from "./types";
 import "./styles.css";
+import "./judge.css";
+
+type View = { name: "home" } | { name: "stone"; stone: Stone } | { name: "judge" };
 
 function App() {
-  const [stone, setStone] = useState<Stone | null>(null);
+  const [view, setView] = useState<View>({ name: "home" });
   useEffect(() => {
     requestPersistence();
   }, []);
-  return stone ? <StoneDetail stone={stone} onBack={() => setStone(null)} /> : <Home onOpen={setStone} />;
+  const home = () => setView({ name: "home" });
+  if (view.name === "stone") return <StoneDetail stone={view.stone} onBack={home} />;
+  if (view.name === "judge") return <Judge onBack={home} />;
+  return <Home onOpen={(stone) => setView({ name: "stone", stone })} onJudge={() => setView({ name: "judge" })} />;
 }
 
 createRoot(document.getElementById("root")!).render(

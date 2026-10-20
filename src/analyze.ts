@@ -1,0 +1,116 @@
+/** ブラウザ側: 画像Blobを縮小して特徴量を取り出す。学習時と判定時で同じ関数を使う。 */
+import { extractFeatures, type StoneFeatures } from "./features";
+import { listShots, listStones } from "./db";
+import { isModel, type Model, type StoneSamples } from "./model";
+
+const ANALYSIS_LONG_SIDE = 400;
+
+export interface Analysis {
+  features: StoneFeatures;
+  maskPreview?: string; // 石と認識した範囲を色付けした画像（確認用）
+}
+
+export async function analyzeBlob(blob: Blob, withPreview = false): Promise<Analysis> {
+  const bmp = await createImageBitmap(blob);
+  try {
+    const s = Math.min(1, ANALYSIS_LONG_SIDE / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * s));
+    const h = Math.max(1, Math.round(bmp.height * s));
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext("2d", { willReadFrequently: true })!;
+    ctx.drawImage(bmp, 0, 0, w, h);
+    const img = ctx.getImageData(0, 0, w, h);
+    const { features, mask } = extractFeatures(img.data, w, h);
+    if (!withPreview) return { features };
+    const d = img.data;
+    for (let i = 0; i < mask.length; i++) {
+      if (mask[i]) {
+        d[i * 4] = d[i * 4] * 0.55 + 47 * 0.45;
+        d[i * 4 + 1] = d[i * 4 + 1] * 0.55 + 160 * 0.45;
+        d[i * 4 + 2] = d[i * 4 + 2] * 0.55 + 170 * 0.45;
+      } else {
+        d[i * 4] *= 0.45;
+        d[i * 4 + 1] *= 0.45;
+        d[i * 4 + 2] *= 0.45;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return { features, maskPreview: c.toDataURL("image/jpeg", 0.85) };
+  } finally {
+    bmp.close();
+  }
+}
+
+/** 保存済みの写真すべてから特徴量を作る（順番に処理してメモリを節約） */
+export async function collectSamples(onProgress: (done: number, total: number) => void): Promise<StoneSamples[]> {
+  const [stones, shots] = await Promise.all([listStones(), listShots()]);
+  const byStone = new Map<string, StoneSamples>(
+    stones.map((s) => [s.id, { stoneId: s.id, grade: s.grade, dry: [], wet: [] }]),
+  );
+  let done = 0;
+  for (const shot of shots) {
+    const target = byStone.get(shot.stoneId);
+    if (target) {
+      try {
+        const { features } = await analyzeBlob(shot.blob);
+        if (features.areaRatio > 0.01) target[shot.condition].push(features);
+      } catch {
+        /* 読めない画像は飛ばす */
+      }
+    }
+    onProgress(++done, shots.length);
+  }
+  return [...byStone.values()];
+}
+
+const KEY = "togan-model-v1";
+
+export function saveModel(m: Model) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(m));
+  } catch {
+    /* 保存できない環境では、その場だけ使う */
+  }
+}
+
+/** この端末で学習したモデル → なければ公開されている public/model.json */
+export async function loadModel(): Promise<{ model: Model; source: "local" | "bundled" } | null> {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const m = JSON.parse(raw);
+      if (isModel(m)) return { model: m, source: "local" };
+    }
+  } catch {
+    /* noop */
+  }
+  try {
+    const res = await fetch("/model.json", { cache: "no-store" });
+    if (res.ok) {
+      const m = await res.json();
+      if (isModel(m)) return { model: m, source: "bundled" };
+    }
+  } catch {
+    /* noop */
+  }
+  return null;
+}
+
+export function clearLocalModel() {
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    /* noop */
+  }
+}
+
+export function downloadModel(m: Model) {
+  const blob = new Blob([JSON.stringify(m)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "model.json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+}

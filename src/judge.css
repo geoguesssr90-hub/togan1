@@ -1,0 +1,31 @@
+/* 判定・学習まわりのスタイル（styles.css の変数を使う） */
+.model-panel { padding: 14px; margin: 16px 0 4px; }
+.model-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 10px; }
+.model-head h3 { margin: 0; color: var(--ink); font-size: 16px; }
+.model-sub { justify-content: flex-end; margin-top: 6px; }
+.model-sub > * { flex: 0 0 auto; }
+
+.judge-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; font-size: 13px; text-align: center; }
+.judge-steps span { padding: 6px 0; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); }
+.judge-steps .on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.judge-steps .done { color: var(--ink); }
+
+.judge-top { font-size: 56px; line-height: 1.1; margin: 4px 0 12px; font-variant-numeric: tabular-nums; }
+.judge-top span { font-size: 22px; margin-left: 4px; }
+.judge-top small { font-size: 18px; color: var(--muted); font-weight: 500; margin-left: 12px; }
+
+.probs { display: grid; gap: 6px; margin-bottom: 8px; }
+.prob { display: grid; grid-template-columns: 64px 1fr 44px; align-items: center; gap: 8px; font-size: 14px; font-variant-numeric: tabular-nums; }
+.prob-bar { height: 10px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.prob-bar span { display: block; height: 100%; background: var(--muted); border-radius: 99px; }
+.prob.top .prob-bar span { background: var(--accent); }
+.prob.top { font-weight: 600; }
+.prob-val { text-align: right; }
+
+.summary tr.emph td { font-weight: 600; }
+.summary td[colspan] { text-align: right; }
+
+.mask-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mask-pair figure { margin: 0; }
+.mask-pair img { width: 100%; border-radius: 8px; display: block; }
+.mask-pair figcaption { font-size: 12px; color: var(--muted); text-align: center; margin-top: 2px; }

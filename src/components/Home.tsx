@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { deleteStone, listShots, listStones, nextStoneId, putStone } from "../db";
 import { exportDataset } from "../exportZip";
 import { GRADES, type Grade, type Shot, type Stone } from "../types";
+import { ModelPanel } from "./ModelPanel";
 
-export function Home({ onOpen }: { onOpen: (s: Stone) => void }) {
+export function Home({ onOpen, onJudge }: { onOpen: (s: Stone) => void; onJudge: () => void }) {
   const [stones, setStones] = useState<Stone[]>([]);
   const [shots, setShots] = useState<Shot[]>([]);
   const [adding, setAdding] = useState(false);
@@ -123,6 +124,8 @@ export function Home({ onOpen }: { onOpen: (s: Stone) => void }) {
         ))}
         {stones.length === 0 && !adding && <li className="empty">まだ石が登録されていません。</li>}
       </ul>
+
+      <ModelPanel onJudge={onJudge} />
 
       <button className="ghost wide" onClick={doExport} disabled={exporting || shots.length === 0}>
         {exporting ? "書き出し中…" : `学習用データを書き出す（${shots.length}枚・ZIP）`}
