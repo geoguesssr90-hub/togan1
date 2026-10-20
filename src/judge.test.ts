@@ -3,19 +3,16 @@ import { extractFeatures, otsu, rgbToLab, type StoneFeatures } from "./features"
 import { featureVector, FEATURE_NAMES } from "./features";
 import { buildSamples, isModel, predict, trainModel, type StoneSamples } from "./model";
 
-/**
- * 灰色の背景(110)に、明るい石(stone)と左下の影を描いた画像。
- * 影は縁がなめらかに薄くなる（拡散光の影）。縁のくっきりした影は、影として外れない
- */
+/** 灰色の背景(110)に、明るい石(stone)と左の影(30)を描いた画像 */
 function scene(w: number, h: number, stone: [number, number, number]) {
   const a = new Uint8ClampedArray(w * h * 4);
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4;
+      let c: [number, number, number] = [110, 110, 110];
       const inStone = (x - w * 0.38) ** 2 + (y - h * 0.5) ** 2 < (h * 0.2) ** 2;
-      const d = Math.hypot(x - w * 0.28, y - h * 0.58);
-      const k = Math.min(1, Math.max(0, (h * 0.2 - d) / 12)); // 影の濃さ（縁で0、内側で1）
-      let c = [110, 110, 110].map((v) => v * (1 - 0.45 * k)) as [number, number, number];
+      const inShadow = (x - w * 0.28) ** 2 + (y - h * 0.58) ** 2 < (h * 0.2) ** 2;
+      if (inShadow) c = [30, 30, 30];
       if (inStone) c = stone;
       a[i] = c[0]; a[i + 1] = c[1]; a[i + 2] = c[2]; a[i + 3] = 255;
     }

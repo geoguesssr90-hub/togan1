@@ -180,7 +180,7 @@ function SingleJudge({ model, onBack, modeSwitch, modelInfo }: ModeProps) {
         ))}
       </div>
 
-      {tooLarge && <p className="warnings warn">{SEGMENT_WARNING}（石として認識した範囲が画面の50%以上あります）</p>}
+      {tooLarge && <p className="warnings warn">{SEGMENT_WARNING}（石として認識した範囲が画面の30%以上あります）</p>}
 
       <h3>判定の根拠</h3>
       <table className="summary">

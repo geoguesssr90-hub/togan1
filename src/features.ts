@@ -149,31 +149,27 @@ export function featuresFromMask(
   };
 }
 
-// ---- 石の切り出し（背景との色差方式 "bg-diff-2"） ----
+// ---- 石の切り出し（背景との色差方式 "bg-diff-1"） ----
 // 背景の色を画像の外周から推定し、背景と色が違う部分を石とする。
 // 背景が白でも黒でも、石が白くても茶色くても切り出せる。
 
 /** 切り出し方式。学習時と判定時で同じでなければならない（Model.segmentation に記録して照合する） */
-export const SEGMENTATION = "bg-diff-2";
+export const SEGMENTATION = "bg-diff-1";
 
 /** 外周のこの幅（上下は高さ、左右は幅に対する割合）を背景とみなす */
 const BORDER_BAND = 0.05;
-/** 背景との色差のしきい値の下限（ΔE） */
+/** 背景との色差のしきい値の下限（ΔE）。これより小さな差は石とみなさない */
 const MIN_DELTA_E = 8;
 /** しきい値は背景のばらつき（中央絶対偏差）のこの倍数以上にする */
 const BG_SPREAD_FACTOR = 3;
-/** ヒステリシス: 種につながっていれば、しきい値のこの倍率まで石に含める */
-const HYSTERESIS_LOW = 0.6;
 /** 影の判定: 色み（a*, b*）の差がどちらもこれ未満 */
 const SHADOW_MAX_CHROMA_DIFF = 3;
 /** 影の判定: 周囲3×3の明度の標準偏差がこれ未満（影はなめらか。石には模様がある） */
 const SHADOW_MAX_LOCAL_STD = 2;
-/** 影を外すと成分がこの割合未満しか残らないなら、影を外さずに成分ごと石とする */
-const SHADOW_KEEP_RATIO = 0.3;
 /** 面積が画像のこの割合未満の成分はゴミとして捨てる */
 const MIN_STONE_AREA_RATIO = 0.003;
-/** 1個判定で石が画像のこの割合以上を占めたら、背景を石と誤認した可能性がある（警告のみ。学習には使う） */
-export const MAX_SINGLE_STONE_AREA_RATIO = 0.5;
+/** 1個判定で石が画像のこの割合以上を占めたら、背景を石と誤認した可能性がある */
+export const MAX_SINGLE_STONE_AREA_RATIO = 0.3;
 /** 面積が中央値のこの倍数を超えたら「石がくっついている可能性」 */
 const MERGED_AREA_FACTOR = 2.5;
 
@@ -270,103 +266,40 @@ function fillHoles(src: Uint8Array, width: number, height: number): Uint8Array {
 
 export interface Foreground {
   mask: Uint8Array; // 1=石の候補
-  threshold: number; // 種にした ΔE のしきい値（広げる下限はこの HYSTERESIS_LOW 倍）
+  threshold: number; // 使った ΔE のしきい値
   background: Background;
-}
-
-/** ΔE がしきい値以上の画素を種にし、そこにつながっていて low 以上の画素までを広げる（4近傍） */
-function hysteresis(dE: Float32Array, width: number, height: number, high: number, low: number): Uint8Array {
-  const n = width * height;
-  const mask = new Uint8Array(n);
-  const stack = new Int32Array(n);
-  let sp = 0;
-  for (let i = 0; i < n; i++) if (dE[i] >= high) { mask[i] = 1; stack[sp++] = i; }
-  const visit = (j: number) => {
-    if (!mask[j] && dE[j] >= low) { mask[j] = 1; stack[sp++] = j; }
-  };
-  while (sp > 0) {
-    const i = stack[--sp];
-    const x = i % width, y = (i - x) / width;
-    if (x > 0) visit(i - 1);
-    if (x < width - 1) visit(i + 1);
-    if (y > 0) visit(i - width);
-    if (y < height - 1) visit(i + width);
-  }
-  return mask;
-}
-
-/**
- * 影を外す（成分ごとに判断する）。
- * 影の条件（背景より暗い・色みの差が小さい・周囲3×3がなめらか）に当てはまる画素のうち、
- * 成分の外側の縁から、影の条件の画素だけをたどってつながっているものを影とする。
- * 石の縁は背景との差で「なめらか」にならないので、たどりは石の中に入らない。
- * それでも外した結果が元の成分の SHADOW_KEEP_RATIO 未満になる成分は、影を外さずそのまま残す
- * （縁のぼけた、模様の少ない灰色の石を丸ごと消さないため）。
- */
-function removeShadows(lab: LabImage, fg: Uint8Array, bg: Background): Uint8Array {
-  const { width: w, height: h } = lab;
-  const n = w * h;
-  const lstd = localStdL(lab);
-  const isShadow = (i: number) =>
-    lab.L[i] < bg.L &&
-    Math.abs(lab.a[i] - bg.a) < SHADOW_MAX_CHROMA_DIFF &&
-    Math.abs(lab.b[i] - bg.b) < SHADOW_MAX_CHROMA_DIFF &&
-    lstd[i] < SHADOW_MAX_LOCAL_STD;
-
-  // filled が 0 の画素が成分の外側（画像の外周からたどれる背景）。内部の穴に面した縁は「外側の縁」に含めない
-  const filled = fillHoles(fg, w, h);
-  const stack = new Int32Array(n);
-  const shadow = new Uint8Array(n);
-  let sp = 0;
-  for (let i = 0; i < n; i++) {
-    if (!fg[i] || !isShadow(i)) continue;
-    const x = i % w, y = (i - x) / w;
-    const onEdge =
-      x === 0 || y === 0 || x === w - 1 || y === h - 1 ||
-      !filled[i - 1] || !filled[i + 1] || !filled[i - w] || !filled[i + w];
-    if (onEdge) { shadow[i] = 1; stack[sp++] = i; }
-  }
-  const visit = (j: number) => {
-    if (fg[j] && !shadow[j] && isShadow(j)) { shadow[j] = 1; stack[sp++] = j; }
-  };
-  while (sp > 0) {
-    const i = stack[--sp];
-    const x = i % w, y = (i - x) / w;
-    if (x > 0) visit(i - 1);
-    if (x < w - 1) visit(i + 1);
-    if (y > 0) visit(i - w);
-    if (y < h - 1) visit(i + w);
-  }
-
-  // 成分ごとに、外したあとに残る割合を確かめる
-  const { labels, comps } = components(fg, w, h);
-  const removed = new Int32Array(comps.length + 1);
-  for (let i = 0; i < n; i++) if (shadow[i]) removed[labels[i]]++;
-  const keepWhole = new Uint8Array(comps.length + 1);
-  for (const c of comps) if (c.area - removed[c.label] < c.area * SHADOW_KEEP_RATIO) keepWhole[c.label] = 1;
-
-  const out = new Uint8Array(n);
-  for (let i = 0; i < n; i++) if (fg[i] && (!shadow[i] || keepWhole[labels[i]])) out[i] = 1;
-  return out;
 }
 
 /**
  * 背景と色が違う画素を石の候補にする。
  * 1. 外周から背景色を推定し、各画素の背景色との色差 ΔE を計算
- * 2. しきい値 = max(背景のばらつき×3, ΔE 8)。これ以上の画素を種に、つながっていて
- *    しきい値×0.6 以上の画素まで広げる（ヒステリシス。白っぽい石の境界を取りこぼさない）。
- *    大津の方法は使わない（濃い石と並ぶとしきい値が上がり、白っぽい石が消えるため）
- * 3. 影を成分ごとに外す（removeShadows）
+ * 2. ΔE を大津の方法で二値化（しきい値は 背景のばらつき×3 と ΔE=8 の大きい方が下限）
+ * 3. 背景より暗く、色みがほぼ同じで、なめらかな画素は影として外す
  * 4. オープニング（細い線・小さな点を消す）→ クロージング（小さな隙間を閉じる）→ 内部の穴埋め
+ *    影を外したあとに残る1画素幅の縁取りが穴埋めで影を囲い直さないよう、オープニングを先にする
  */
 export function foregroundMask(lab: LabImage): Foreground {
   const { width: w, height: h } = lab;
   const n = w * h;
   const bg = estimateBackground(lab);
   const dE = new Float32Array(n);
-  for (let i = 0; i < n; i++) dE[i] = Math.hypot(lab.L[i] - bg.L, lab.a[i] - bg.a, lab.b[i] - bg.b);
-  const threshold = Math.max(BG_SPREAD_FACTOR * bg.spread, MIN_DELTA_E);
-  let mask = removeShadows(lab, hysteresis(dE, w, h, threshold, threshold * HYSTERESIS_LOW), bg);
+  let maxDE = 0;
+  for (let i = 0; i < n; i++) {
+    dE[i] = Math.hypot(lab.L[i] - bg.L, lab.a[i] - bg.a, lab.b[i] - bg.b);
+    if (dE[i] > maxDE) maxDE = dE[i];
+  }
+  const threshold = Math.max(otsu(dE, 0, Math.max(maxDE, 1)), BG_SPREAD_FACTOR * bg.spread, MIN_DELTA_E);
+  const lstd = localStdL(lab);
+  let mask: Uint8Array = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    if (dE[i] < threshold) continue;
+    const shadow =
+      lab.L[i] < bg.L &&
+      Math.abs(lab.a[i] - bg.a) < SHADOW_MAX_CHROMA_DIFF &&
+      Math.abs(lab.b[i] - bg.b) < SHADOW_MAX_CHROMA_DIFF &&
+      lstd[i] < SHADOW_MAX_LOCAL_STD;
+    if (!shadow) mask[i] = 1;
+  }
   mask = morph3(morph3(mask, w, h, true), w, h, false); // オープニング
   mask = morph3(morph3(mask, w, h, false), w, h, true); // クロージング
   mask = fillHoles(mask, w, h);
@@ -420,14 +353,6 @@ function components(bin: Uint8Array, width: number, height: number): { labels: I
  * ok: 石を切り出せた / none: 石が見つからない / tooLarge: 石が大きすぎる（背景を石と誤認した可能性）
  */
 export type SegmentStatus = "ok" | "none" | "tooLarge";
-
-/**
- * 学習に使える写真か。石が見つからない写真だけを外す。
- * 大きすぎる（tooLarge）写真も、外周に接していない石が切り出せているので使う。
- */
-export function usableForTraining(status: SegmentStatus): boolean {
-  return status !== "none";
-}
 
 export interface Extracted {
   features: StoneFeatures;

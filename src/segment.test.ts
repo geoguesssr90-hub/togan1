@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractFeatures, rgbToLab, segmentStones, usableForTraining } from "./features";
+import { extractFeatures, rgbToLab, segmentStones } from "./features";
 
 type RGB = [number, number, number];
 
@@ -120,26 +120,10 @@ describe("segmentation by difference from the background", () => {
     expect(segmentStones(img, W, H).stones).toEqual([]);
   });
 
-  it("white paper on a dark table is flagged as too large (50% or more of the image)", () => {
+  it("white paper on a dark table is flagged as too large instead of being taken as the stone", () => {
     // 外周は机（暗い）、中央に大きな白い紙。紙が「背景と違う色の成分」になる
-    const paper: Stone = { cx: 100, cy: 75, r: 72, color: WHITE, texture: 2 };
-    const { status } = extractFeatures(scene(W, H, BLACK, [paper]), W, H);
-    expect(status).toBe("tooLarge");
-    expect(usableForTraining(status)).toBe(true); // 警告は出すが、外周に接していないので学習には使う
-  });
-
-  it("a stone filling 40% of the image is used for training without a warning", () => {
-    const r = Math.sqrt((0.4 * W * H) / Math.PI);
-    const stone: Stone = { cx: 100, cy: 75, r, color: [150, 105, 70], texture: 8 };
-    const { status, features } = extractFeatures(scene(W, H, WHITE, [stone]), W, H);
-    expect(features.areaRatio).toBeGreaterThan(0.38);
-    expect(status).toBe("ok");
-    expect(usableForTraining(status)).toBe(true);
-  });
-
-  it("only photos with no stone found are left out of training", () => {
-    expect(usableForTraining("none")).toBe(false);
-    expect(usableForTraining("ok")).toBe(true);
+    const paper: Stone = { cx: 100, cy: 75, r: 70, color: WHITE, texture: 2 };
+    expect(extractFeatures(scene(W, H, BLACK, [paper]), W, H).status).toBe("tooLarge");
   });
 
   it("batch: warns when most of the foreground touches the edge (background not separated)", () => {
@@ -153,43 +137,5 @@ describe("segmentation by difference from the background", () => {
     const seg = segmentStones(a, W, H);
     expect(seg.stones).toEqual([]);
     expect(seg.suspicious).toBe(true);
-  });
-});
-
-// 弱点A・Bの再現ケース。模様のない石（flat）と、石の内部に明度±3程度の細かいノイズを入れた石（noisy）の両方で確かめる
-describe.each([
-  ["flat", 0],
-  ["noisy (L* ±3)", 8],
-])("stones that used to be lost: %s", (_name, texture) => {
-  it("A: gray, brown and whitish stones side by side on white are all found", () => {
-    const stones: Stone[] = [
-      { cx: 50, cy: 75, r: 22, color: [171, 171, 171], texture },
-      { cx: 105, cy: 75, r: 22, color: [150, 105, 70], texture },
-      { cx: 160, cy: 75, r: 22, color: [226, 222, 208], texture },
-    ];
-    const seg = segmentStones(scene(W, H, WHITE, stones), W, H);
-    expect(seg.stones.length).toBe(3);
-    seg.stones.forEach((s, k) => expect(Math.abs(s.cx - stones[k].cx)).toBeLessThan(2));
-    // 白っぽい石も、境界まで取りこぼさずに切り出せている
-    expect(seg.stones[2].area).toBeGreaterThan(Math.PI * 22 * 22 * 0.85);
-  });
-
-  it("B: twelve gray circles on white are all found", () => {
-    const w = 400, h = 300;
-    const stones: Stone[] = [];
-    for (let j = 0; j < 3; j++)
-      for (let k = 0; k < 4; k++) stones.push({ cx: 55 + 97 * k, cy: 55 + 95 * j, r: 30, color: [171, 171, 171], texture });
-    const seg = segmentStones(scene(w, h, WHITE, stones), w, h);
-    expect(seg.stones.length).toBe(12);
-    expect(seg.stones.every((s) => s.area > Math.PI * 30 * 30 * 0.85)).toBe(true);
-  });
-
-  it("a soft shadow beside a gray stone is removed and the stone stays", () => {
-    const stone: Stone = { cx: 85, cy: 75, r: 30, color: [171, 171, 171], texture };
-    const shadow: Shadow = { cx: 120, cy: 85, r: 32, depth: 0.12, soft: 12 };
-    const { mask, status } = extractFeatures(scene(W, H, WHITE, [stone], [shadow]), W, H);
-    expect(status).toBe("ok");
-    expect(iou(mask, truthMask(W, H, stone))).toBeGreaterThan(0.85);
-    expect(mask[85 * W + 130]).toBe(0); // 影の中心（石と重ならない位置）
   });
 });
