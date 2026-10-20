@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { makeThumbnail } from "../capture";
+import { toggled } from "../selection";
+import { excludeItems, moveToNewRow, moveToRow, shiftEarlier, shiftLater, type Plan } from "../split";
 
 /** 写真の縮小サムネイルを1枚ずつ順番に作る（大きな写真を一度に読み込まないように） */
 export function useThumbnails(blobs: readonly Blob[]): (string | undefined)[] {
@@ -50,45 +52,115 @@ export function parsePerStone(v: string): number | null {
   return Number.isInteger(n) && n >= 1 ? n : null;
 }
 
-export interface PreviewRow {
-  stoneId: string;
-  photos: number[]; // サムネイルの番号（thumbs の添字）
-}
-
 interface Props {
-  rows: PreviewRow[];
+  plan: Plan;
+  onChange: (plan: Plan) => void;
+  ids: string[]; // 行ごとの石ID（plan.rows と同じ順）
   thumbs: (string | undefined)[];
   perStone: number;
-  total: number;
-  remainder: number;
+  /** 除外の呼び方（新規取り込みなら「取り込まない」、分け直しなら「元の石に残す」） */
+  excludeLabel: string;
 }
 
-/** 石IDごとに1行、割り当てる写真を並べる。別の石が混ざっていないかを目で確かめるための画面 */
-export function SplitPreview({ rows, thumbs, perStone, total, remainder }: Props) {
+/**
+ * 振り分けの確認と手直し。石IDごとに1行、割り当てる写真を並べる。
+ * 写真をタップして選び、「ここへ移す」で別の行へ移す（2タップ方式）。ここでは何も保存しない。
+ */
+export function SplitPreview({ plan, onChange, ids, thumbs, perStone, excludeLabel }: Props) {
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const selecting = selected.size > 0;
+  const total = plan.rows.reduce((s, r) => s + r.length, 0) + plan.excluded.length;
+  const offRows = plan.rows.filter((r) => r.length !== perStone).length;
+
+  function apply(next: Plan) {
+    onChange(next);
+    setSelected(new Set());
+  }
+
+  const thumbsOf = (items: number[], label: string) => (
+    <div className="split-thumbs" style={{ gridTemplateColumns: `repeat(${perStone}, minmax(0, 1fr))` }}>
+      {items.map((i) => {
+        const on = selected.has(i);
+        return (
+          <button
+            key={i}
+            className="shot-select"
+            aria-pressed={on}
+            aria-label={`${label}の写真${on ? "（選択中）" : ""}`}
+            onClick={() => setSelected((sel) => toggled(sel, i))}
+          >
+            {thumbs[i] ? <img src={thumbs[i]} alt="" /> : <span className="split-blank" />}
+            {on && <span className="tick" aria-hidden>選択</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
     <>
       <p className="meta">
-        {total}枚 → 石 {rows.length} 個（{perStone}枚ずつ）
+        {total}枚 → 石 {plan.rows.length} 個（{perStone}枚ずつ）
+        {plan.excluded.length > 0 && `・${excludeLabel} ${plan.excluded.length}枚`}
       </p>
-      {remainder > 0 && (
+      {offRows > 0 && (
         <p className="warnings warn">
-          写真が{total}枚で、{perStone}枚ずつに割り切れません。最後の {rows[rows.length - 1].stoneId} は{remainder}
-          枚だけになります。撮り忘れや余分な写真がないか確認してください。
+          {perStone}枚でない行が {offRows} 行あります（色の付いた行）。撮り忘れや余分な写真がないか確認してください。
         </p>
       )}
-      <p className="tip">各行に同じ石の写真だけが並んでいるか確認してください。ずれている場合は、枚数を直すか、写真を選び直してください。</p>
+      <p className="tip">
+        各行に同じ石の写真だけが並んでいるか確認してください。写真をタップして選び、行の「ここへ移す」で移せます。
+        1か所のずれで後ろがすべてずれた場合は「ここから後ろを1枚前へ／後ろへ」で直せます。
+      </p>
       <ul className="split-rows">
-        {rows.map((r) => (
-          <li key={r.stoneId} className="split-row">
-            <strong>{r.stoneId}</strong>
-            <div className="split-thumbs" style={{ gridTemplateColumns: `repeat(${perStone}, minmax(0, 1fr))` }}>
-              {r.photos.map((i) =>
-                thumbs[i] ? <img key={i} src={thumbs[i]} alt={`${r.stoneId}の写真`} /> : <span key={i} className="split-blank" />,
+        {plan.rows.map((r, k) => (
+          <li key={ids[k]} className={"split-row" + (r.length !== perStone ? " off" : "")}>
+            <div className="split-row-head">
+              <strong>{ids[k]}</strong>
+              <span className="split-count">{r.length}枚</span>
+              {!selecting && (
+                <span className="split-shift">
+                  {k > 0 && (
+                    <button className="x" onClick={() => apply(shiftEarlier(plan, k))}>ここから後ろを1枚前へ</button>
+                  )}
+                  <button className="x" onClick={() => apply(shiftLater(plan, k, perStone))}>ここから後ろを1枚後ろへ</button>
+                </span>
+              )}
+            </div>
+            <div className="split-row-body">
+              {thumbsOf(r, ids[k])}
+              {selecting && (
+                <button className="small" onClick={() => apply(moveToRow(plan, selected, k))}>ここへ移す</button>
               )}
             </div>
           </li>
         ))}
       </ul>
+      {plan.rows.length === 0 && <p className="warnings bad">取り込む写真がありません。</p>}
+
+      {plan.excluded.length > 0 && (
+        <section>
+          <h3>{excludeLabel}写真（{plan.excluded.length}枚）</h3>
+          <p className="tip">タップで選び、行の「ここへ移す」か「新しい石にする」で戻せます。</p>
+          {thumbsOf(plan.excluded, excludeLabel)}
+        </section>
+      )}
+
+      {selecting && (
+        <>
+          <div className="select-bar-spacer" />
+          <div className="select-bar">
+            <div className="split-bar">
+              <span className="meta">{selected.size}枚を選択中</span>
+              <div className="row">
+                <button onClick={() => apply(moveToNewRow(plan, selected))}>新しい石にする</button>
+                <button onClick={() => apply(excludeItems(plan, selected))}>{excludeLabel}</button>
+                <button className="ghost" onClick={() => setSelected(new Set())}>選択を解除</button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 }

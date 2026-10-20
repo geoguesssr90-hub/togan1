@@ -1,7 +1,7 @@
-/** まとめて削除のための選択操作（純粋関数） */
+/** 画面での選択操作（まとめて削除・振り分けの手直し）（純粋関数） */
 
 /** id の選択を切り替えた新しい集合を返す */
-export function toggled(selected: ReadonlySet<string>, id: string): Set<string> {
+export function toggled<T>(selected: ReadonlySet<T>, id: T): Set<T> {
   const next = new Set(selected);
   if (next.has(id)) next.delete(id);
   else next.add(id);
