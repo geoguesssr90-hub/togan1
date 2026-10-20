@@ -36,7 +36,8 @@
 - `src/model.ts` ロジスティック回帰の学習・予測
 - `src/batch.ts` まとめて判定の石ごとの判定、表と裏の対応付け、`worseGrade`
 - `src/analyze.ts` ブラウザ側の画像解析、学習データの収集、モデルの保存・読み込み
-- `src/components/` Home（一覧・集計・書き出し）/ StoneDetail（撮影設定・ギャラリー）/ Camera / BulkImport（写真のまとめて取り込み）/ ModelPanel（学習）/ Judge・BatchJudge（判定）
+- `src/split.ts` 写真を撮影順に並べて「石1個につきN枚」ずつ新しい石IDへ振り分ける（純粋関数）
+- `src/components/` Home（一覧・集計・書き出し）/ StoneDetail（撮影設定・ギャラリー）/ Camera / BulkImport（写真のまとめて取り込み。取り込み処理本体は ImportRunner）/ SplitImport・SplitStone・SplitPreview（N枚ずつ別の石に振り分け）/ ModelPanel（学習）/ Judge・BatchJudge（判定）
 
 ## 約束事
 - UI文言は日本語。絵文字は使わない

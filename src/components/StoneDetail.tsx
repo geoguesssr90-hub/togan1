@@ -5,11 +5,12 @@ import { judgeQuality } from "../quality";
 import { CONDITION_LABEL, type Shot, type Stone } from "../types";
 import { BulkImport } from "./BulkImport";
 import { Camera } from "./Camera";
+import { SplitStone } from "./SplitStone";
 
 export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => void }) {
   const [shots, setShots] = useState<Shot[]>([]);
   const [hasCard, setHasCard] = useState(true);
-  const [mode, setMode] = useState<"list" | "camera">("list");
+  const [mode, setMode] = useState<"list" | "camera" | "split">("list");
   const [pending, setPending] = useState<Captured | null>(null);
   const [importFiles, setImportFiles] = useState<File[] | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
@@ -113,6 +114,23 @@ export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => voi
     );
   }
 
+  if (mode === "split") {
+    return (
+      <SplitStone
+        stone={stone}
+        shots={shots}
+        onCancel={() => setMode("list")}
+        onDone={(deleted) => {
+          if (deleted) onBack();
+          else {
+            setMode("list");
+            reload();
+          }
+        }}
+      />
+    );
+  }
+
   if (mode === "camera") {
     return (
       <div className="screen camera-screen">
@@ -141,6 +159,11 @@ export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => voi
         写真をまとめて取り込む
       </button>
       <input ref={importRef} type="file" accept="image/*" multiple hidden onChange={onImportFiles} />
+      {shots.length >= 2 && (
+        <button className="ghost wide" onClick={() => setMode("split")}>
+          N枚ずつ別の石に分ける
+        </button>
+      )}
       <section>
         <h3>写真（{shots.length}枚）</h3>
         <div className="grid">

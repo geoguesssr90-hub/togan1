@@ -52,8 +52,32 @@ export async function deleteShot(id: string) {
   await (await db()).delete("shots", id);
 }
 
+/**
+ * 写真を別の石へ移す。新しい石の作成、写真の付け替え、空になった元の石の削除を1つのトランザクションで行う
+ * （途中で失敗しても中途半端な状態を残さない）。元の石を削除したら true。
+ */
+export async function moveShots(
+  newStones: Stone[],
+  moves: { shotId: string; stoneId: string }[],
+  sourceStoneId: string,
+): Promise<boolean> {
+  const d = await db();
+  const tx = d.transaction(["stones", "shots"], "readwrite");
+  const stones = tx.objectStore("stones");
+  const shots = tx.objectStore("shots");
+  for (const s of newStones) await stones.put(s);
+  for (const m of moves) {
+    const shot = await shots.get(m.shotId);
+    if (shot) await shots.put({ ...shot, stoneId: m.stoneId });
+  }
+  const left = await shots.index("byStone").count(sourceStoneId);
+  if (left === 0) await stones.delete(sourceStoneId);
+  await tx.done;
+  return left === 0;
+}
+
 /** 次の石IDを提案（S001, S002, ...） */
-export function nextStoneId(stones: Stone[]): string {
+export function nextStoneId(stones: readonly Pick<Stone, "id">[]): string {
   const nums = stones.map((s) => /^S(\d+)$/.exec(s.id)?.[1]).filter(Boolean).map(Number);
   const n = nums.length ? Math.max(...nums) + 1 : 1;
   return "S" + String(n).padStart(3, "0");

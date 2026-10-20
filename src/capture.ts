@@ -50,6 +50,24 @@ export async function captureFromFile(file: File): Promise<Captured> {
   }
 }
 
+/** 確認画面用の小さなサムネイル（短辺 size px）。大きな写真を何枚も並べてもメモリを使いすぎないように */
+export async function makeThumbnail(blob: Blob, size = 192): Promise<string> {
+  const bmp = await createImageBitmap(blob, { imageOrientation: "from-image" });
+  try {
+    const s = Math.min(1, size / Math.min(bmp.width, bmp.height));
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(bmp.width * s));
+    c.height = Math.max(1, Math.round(bmp.height * s));
+    c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
+    const small: Blob = await new Promise((res, rej) =>
+      c.toBlob((b) => (b ? res(b) : rej(new Error("JPEG変換に失敗"))), "image/jpeg", 0.8),
+    );
+    return URL.createObjectURL(small);
+  } finally {
+    bmp.close();
+  }
+}
+
 export function newId(): string {
   return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36);
 }

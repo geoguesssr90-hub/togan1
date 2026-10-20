@@ -4,7 +4,15 @@ import { exportDataset } from "../exportZip";
 import { GRADES, type Grade, type Shot, type Stone } from "../types";
 import { ModelPanel } from "./ModelPanel";
 
-export function Home({ onOpen, onJudge }: { onOpen: (s: Stone) => void; onJudge: () => void }) {
+export function Home({
+  onOpen,
+  onJudge,
+  onSplitImport,
+}: {
+  onOpen: (s: Stone) => void;
+  onJudge: () => void;
+  onSplitImport: () => void;
+}) {
   const [stones, setStones] = useState<Stone[]>([]);
   const [shots, setShots] = useState<Shot[]>([]);
   const [adding, setAdding] = useState(false);
@@ -108,7 +116,10 @@ export function Home({ onOpen, onJudge }: { onOpen: (s: Stone) => void; onJudge:
           </div>
         </form>
       ) : (
-        <button className="primary wide" onClick={startAdd}>石を登録する</button>
+        <>
+          <button className="primary wide" onClick={startAdd}>石を登録する</button>
+          <button className="wide import-button" onClick={onSplitImport}>複数の石をまとめて取り込む</button>
+        </>
       )}
 
       <ul className="stones">
