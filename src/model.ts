@@ -146,7 +146,25 @@ export function trainModel(all: StoneSamples[]): Model {
   };
 }
 
+/**
+ * 読み込んだデータが、今のコードで使えるモデルかを確かめる。
+ * 特徴量の数・順番（featureNames）が FEATURE_NAMES と違うモデルは、読めても誤った判定になるので受け付けない。
+ */
 export function isModel(v: unknown): v is Model {
   const m = v as Model;
-  return !!m && m.version === 2 && Array.isArray(m.grades) && Array.isArray(m.W) && m.W.length === m.grades.length;
+  if (!m || m.version !== 2 || !Array.isArray(m.grades) || m.grades.length < 2) return false;
+  const d = FEATURE_NAMES.length;
+  const numbers = (a: unknown, n: number) =>
+    Array.isArray(a) && a.length === n && a.every((x) => typeof x === "number" && Number.isFinite(x));
+  return (
+    Array.isArray(m.featureNames) &&
+    m.featureNames.length === d &&
+    m.featureNames.every((f, j) => f === FEATURE_NAMES[j]) &&
+    numbers(m.mean, d) &&
+    numbers(m.std, d) &&
+    numbers(m.bias, m.grades.length) &&
+    Array.isArray(m.W) &&
+    m.W.length === m.grades.length &&
+    m.W.every((w) => numbers(w, d))
+  );
 }

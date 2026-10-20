@@ -1,11 +1,19 @@
 import { useEffect, useState } from "react";
-import { clearLocalModel, collectSamples, downloadModel, loadModel, saveModel } from "../analyze";
+import {
+  clearLocalModel,
+  collectSamples,
+  downloadModel,
+  loadModel,
+  MODEL_SOURCE_LABEL,
+  saveModel,
+  type ModelSource,
+} from "../analyze";
 import { trainModel, usableStones, type Model } from "../model";
 
 /** 一覧画面に置く「学習」「判定」パネル */
 export function ModelPanel({ onJudge }: { onJudge: () => void }) {
   const [model, setModel] = useState<Model | null>(null);
-  const [source, setSource] = useState<"local" | "bundled" | null>(null);
+  const [source, setSource] = useState<ModelSource | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,7 +44,7 @@ export function ModelPanel({ onJudge }: { onJudge: () => void }) {
   }
 
   function reset() {
-    if (!confirm("この端末で学習したモデルを削除しますか？")) return;
+    if (!confirm("この端末で学習したモデルを削除しますか？公開版のモデルがあれば、以後はそれで判定します。")) return;
     clearLocalModel();
     loadModel().then((r) => {
       setModel(r?.model ?? null);
@@ -50,7 +58,7 @@ export function ModelPanel({ onJudge }: { onJudge: () => void }) {
         <h3>判定モデル</h3>
         {model ? (
           <span className="meta">
-            {source === "bundled" ? "公開版" : "この端末で学習"}・石 {model.nStones} 個・{model.grades.map((g) => g + "等級").join(" / ")}
+            {MODEL_SOURCE_LABEL[source ?? "local"]}・石 {model.nStones} 個・{model.grades.map((g) => g + "等級").join(" / ")}
             {model.cvAccuracy != null && `・検証正解率 ${Math.round(model.cvAccuracy * 100)}%`}
           </span>
         ) : (

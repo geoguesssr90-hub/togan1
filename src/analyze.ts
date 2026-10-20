@@ -106,8 +106,29 @@ export function saveModel(m: Model) {
   }
 }
 
-/** この端末で学習したモデル → なければ公開されている public/model.json */
-export async function loadModel(): Promise<{ model: Model; source: "local" | "bundled" } | null> {
+export type ModelSource = "local" | "bundled";
+
+export const MODEL_SOURCE_LABEL: Record<ModelSource, string> = { local: "この端末で学習", bundled: "公開版" };
+
+/** 判定画面などに出すモデルの説明（どちらのモデルか・学習した石の数・日時・検証正解率） */
+export function describeModel(model: Model, source: ModelSource): string {
+  return [
+    MODEL_SOURCE_LABEL[source],
+    `石 ${model.nStones} 個`,
+    new Date(model.trainedAt).toLocaleString("ja-JP"),
+    model.cvAccuracy != null ? `検証正解率 ${Math.round(model.cvAccuracy * 100)}%` : null,
+  ]
+    .filter(Boolean)
+    .join("・");
+}
+
+/**
+ * この端末で学習したモデル → なければ公開されている public/model.json。
+ * 端末で学習したモデルを優先するのは、その端末で意図して学習し直した結果を使うため。
+ * 公開版に戻すときは「端末のモデルを削除」を使う。形式が古い・壊れた端末のモデルは無視して公開版を使う。
+ * public/model.json は Service Worker が事前キャッシュするので、オフラインでも読める。
+ */
+export async function loadModel(): Promise<{ model: Model; source: ModelSource } | null> {
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) {

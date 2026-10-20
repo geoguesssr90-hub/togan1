@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { analyzeBlob, loadModel, type Analysis } from "../analyze";
+import { analyzeBlob, describeModel, loadModel, type Analysis, type ModelSource } from "../analyze";
 import type { Captured } from "../capture";
 import { predict, type Model } from "../model";
 import { BatchJudge } from "./BatchJudge";
@@ -16,16 +16,16 @@ type Mode = "single" | "batch";
 const MODE_LABEL: Record<Mode, string> = { single: "1個ずつ", batch: "まとめて" };
 
 export function Judge({ onBack }: { onBack: () => void }) {
-  const [model, setModel] = useState<Model | null | undefined>(undefined);
+  const [loaded, setLoaded] = useState<{ model: Model; source: ModelSource } | null | undefined>(undefined);
   const [mode, setMode] = useState<Mode>("single");
 
   useEffect(() => {
-    loadModel().then((r) => setModel(r?.model ?? null));
+    loadModel().then(setLoaded);
   }, []);
 
-  if (model === undefined) return <div className="screen"><p className="meta">モデルを読み込み中…</p></div>;
+  if (loaded === undefined) return <div className="screen"><p className="meta">モデルを読み込み中…</p></div>;
 
-  if (model === null) {
+  if (loaded === null) {
     return (
       <div className="screen">
         <button className="back" onClick={onBack}>← 一覧</button>
@@ -35,21 +35,26 @@ export function Judge({ onBack }: { onBack: () => void }) {
     );
   }
 
+  const { model, source } = loaded;
+  const modelInfo = <p className="meta judge-model">使用モデル: {describeModel(model, source)}</p>;
   // 切り替えは各モードの最初の撮影画面にだけ出す（途中で切り替えて撮影済みの写真を失わないように）
   const modeSwitch = (
-    <div className="seg judge-mode" role="radiogroup" aria-label="判定のしかた">
-      {(["single", "batch"] as Mode[]).map((m) => (
-        <button key={m} className={mode === m ? "on" : ""} onClick={() => setMode(m)} role="radio" aria-checked={mode === m}>
-          {MODE_LABEL[m]}
-        </button>
-      ))}
-    </div>
+    <>
+      <div className="seg judge-mode" role="radiogroup" aria-label="判定のしかた">
+        {(["single", "batch"] as Mode[]).map((m) => (
+          <button key={m} className={mode === m ? "on" : ""} onClick={() => setMode(m)} role="radio" aria-checked={mode === m}>
+            {MODE_LABEL[m]}
+          </button>
+        ))}
+      </div>
+      {modelInfo}
+    </>
   );
 
   return mode === "single" ? (
-    <SingleJudge model={model} onBack={onBack} modeSwitch={modeSwitch} />
+    <SingleJudge model={model} onBack={onBack} modeSwitch={modeSwitch} modelInfo={modelInfo} />
   ) : (
-    <BatchJudge model={model} onBack={onBack} modeSwitch={modeSwitch} />
+    <BatchJudge model={model} onBack={onBack} modeSwitch={modeSwitch} modelInfo={modelInfo} />
   );
 }
 
@@ -57,10 +62,11 @@ interface ModeProps {
   model: Model;
   onBack: () => void;
   modeSwitch: ReactNode;
+  modelInfo: ReactNode; // どちらのモデルで判定したか（結果画面に出す）
 }
 
 /** 1個ずつ: 乾燥写真を1枚撮る → 結果 */
-function SingleJudge({ model, onBack, modeSwitch }: ModeProps) {
+function SingleJudge({ model, onBack, modeSwitch, modelInfo }: ModeProps) {
   const [step, setStep] = useState<Step>("capture");
   const [shot, setShot] = useState<Shot | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -157,10 +163,7 @@ function SingleJudge({ model, onBack, modeSwitch }: ModeProps) {
         色の付いた部分だけを使って判定しています。影や背景に色が付いている場合は、撮り方を見直してください。
       </p>
 
-      <p className="tip">
-        学習: 石 {model.nStones} 個 / {new Date(model.trainedAt).toLocaleString("ja-JP")}
-        {model.cvAccuracy != null && ` / 検証正解率 ${Math.round(model.cvAccuracy * 100)}%`}
-      </p>
+      {modelInfo}
 
       <button className="primary wide" onClick={restart}>別の石を判定する</button>
     </div>

@@ -30,10 +30,11 @@ interface Props {
   model: Model;
   onBack: () => void;
   modeSwitch: ReactNode;
+  modelInfo: ReactNode; // どちらのモデルで判定したか（結果画面に出す）
 }
 
 /** まとめて判定: 暗い背景に並べた複数の石を1枚で撮り、1個ずつ切り出して判定する */
-export function BatchJudge({ model, onBack, modeSwitch }: Props) {
+export function BatchJudge({ model, onBack, modeSwitch, modelInfo }: Props) {
   const [step, setStep] = useState<Step>("front");
   const [front, setFront] = useState<Captured | null>(null);
   const [result, setResult] = useState<Result | null>(null);
@@ -73,7 +74,7 @@ export function BatchJudge({ model, onBack, modeSwitch }: Props) {
 
   if (step === "analyzing") return <div className="screen"><p className="meta">石を切り出して判定中…</p></div>;
 
-  if (step === "result" && result) return <BatchResult result={result} model={model} onBack={onBack} onRestart={restart} />;
+  if (step === "result" && result) return <BatchResult result={result} modelInfo={modelInfo} onBack={onBack} onRestart={restart} />;
 
   const key = step as PhotoKey;
   const isFront = key === "front";
@@ -130,7 +131,17 @@ function fmt(j: StoneJudgement | null) {
   return j ? `${j.grade}等級（${Math.round(j.prob * 100)}%）` : "—";
 }
 
-function BatchResult({ result, model, onBack, onRestart }: { result: Result; model: Model; onBack: () => void; onRestart: () => void }) {
+function BatchResult({
+  result,
+  modelInfo,
+  onBack,
+  onRestart,
+}: {
+  result: Result;
+  modelInfo: ReactNode;
+  onBack: () => void;
+  onRestart: () => void;
+}) {
   const { front, back, rows, warnings } = result;
 
   return (
@@ -183,10 +194,7 @@ function BatchResult({ result, model, onBack, onRestart }: { result: Result; mod
       <p className="tip">
         総合は表と裏のうち悪い方の等級です。番号は写真の上の行から、各行を左から右の順です。
       </p>
-      <p className="tip">
-        学習: 石 {model.nStones} 個 / {new Date(model.trainedAt).toLocaleString("ja-JP")}
-        {model.cvAccuracy != null && ` / 検証正解率 ${Math.round(model.cvAccuracy * 100)}%`}
-      </p>
+      {modelInfo}
 
       <button className="primary wide" onClick={onRestart}>別の石を判定する</button>
     </div>
