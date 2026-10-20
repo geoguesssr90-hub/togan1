@@ -183,13 +183,56 @@ describe.each([
     expect(seg.stones.length).toBe(12);
     expect(seg.stones.every((s) => s.area > Math.PI * 30 * 30 * 0.85)).toBe(true);
   });
+});
 
-  it("a soft shadow beside a gray stone is removed and the stone stays", () => {
-    const stone: Stone = { cx: 85, cy: 75, r: 30, color: [171, 171, 171], texture };
-    const shadow: Shadow = { cx: 120, cy: 85, r: 32, depth: 0.12, soft: 12 };
+/** 白い背景（L* ≈ 95.5）を明度で dL だけ暗くする影の濃さ（0〜1） */
+function depthForDeltaL(dL: number): number {
+  const target = rgbToLab(...WHITE)[0] - dL;
+  let lo = 0, hi = 1;
+  for (let k = 0; k < 30; k++) {
+    const mid = (lo + hi) / 2;
+    const v = Math.round(WHITE[0] * (1 - mid));
+    if (rgbToLab(v, v, v)[0] > target) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+// 影の除去。石には実物に近い明度±3のノイズを入れる（模様が完全にない石の横の影は、石ごと残ることを許容する）
+describe("shadows beside stones (stone texture L* ±3)", () => {
+  const stoneColors: [string, RGB][] = [
+    ["gray", [171, 171, 171]],
+    ["brown", [150, 105, 70]],
+    ["whitish", [226, 222, 208]],
+  ];
+  const shadows: [string, number, number][] = [
+    ["hard, 15 darker", 15, 1],
+    ["hard, 30 darker", 30, 1],
+    ["soft, 15 darker", 15, 12],
+  ];
+  const cases = stoneColors.flatMap(([sName, color]) => shadows.map(([dName, dL, soft]) => [sName, dName, color, dL, soft] as const));
+
+  it.each(cases)("%s stone, %s shadow: the shadow is removed and the stone stays", (_s, _d, color, dL, soft) => {
+    const stone: Stone = { cx: 85, cy: 75, r: 30, color, texture: 8 };
+    const shadow: Shadow = { cx: 115, cy: 85, r: 32, depth: depthForDeltaL(dL), soft };
     const { mask, status } = extractFeatures(scene(W, H, WHITE, [stone], [shadow]), W, H);
     expect(status).toBe("ok");
-    expect(iou(mask, truthMask(W, H, stone))).toBeGreaterThan(0.85);
-    expect(mask[85 * W + 130]).toBe(0); // 影の中心（石と重ならない位置）
+
+    const inStone = truthMask(W, H, stone);
+    let stoneArea = 0, stoneKept = 0, shadowArea = 0, shadowKept = 0;
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        if (inStone[i]) {
+          stoneArea++;
+          if (mask[i]) stoneKept++;
+        } else if (Math.hypot(x - shadow.cx, y - shadow.cy) <= shadow.r - soft) {
+          // 影の濃い部分（縁のぼけを除く、石と重ならない部分）
+          shadowArea++;
+          if (mask[i]) shadowKept++;
+        }
+      }
+    expect(stoneKept / stoneArea).toBeGreaterThanOrEqual(0.85);
+    expect(shadowKept / shadowArea).toBeLessThanOrEqual(0.2);
   });
 });

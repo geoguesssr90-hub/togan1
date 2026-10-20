@@ -149,12 +149,12 @@ export function featuresFromMask(
   };
 }
 
-// ---- 石の切り出し（背景との色差方式 "bg-diff-2"） ----
+// ---- 石の切り出し（背景との色差方式 "bg-diff-3"） ----
 // 背景の色を画像の外周から推定し、背景と色が違う部分を石とする。
 // 背景が白でも黒でも、石が白くても茶色くても切り出せる。
 
 /** 切り出し方式。学習時と判定時で同じでなければならない（Model.segmentation に記録して照合する） */
-export const SEGMENTATION = "bg-diff-2";
+export const SEGMENTATION = "bg-diff-3";
 
 /** 外周のこの幅（上下は高さ、左右は幅に対する割合）を背景とみなす */
 const BORDER_BAND = 0.05;
@@ -166,8 +166,10 @@ const BG_SPREAD_FACTOR = 3;
 const HYSTERESIS_LOW = 0.6;
 /** 影の判定: 色み（a*, b*）の差がどちらもこれ未満 */
 const SHADOW_MAX_CHROMA_DIFF = 3;
-/** 影の判定: 周囲3×3の明度の標準偏差がこれ未満（影はなめらか。石には模様がある） */
+/** 影の判定: 周囲の石の候補の画素での明度の標準偏差がこれ未満（影はなめらか。石には模様がある） */
 const SHADOW_MAX_LOCAL_STD = 2;
+/** 影の判定で、なめらかさを見る窓の半径（2 → 5×5） */
+const SHADOW_WINDOW_RADIUS = 2;
 /** 影を外すと成分がこの割合未満しか残らないなら、影を外さずに成分ごと石とする */
 const SHADOW_KEEP_RATIO = 0.3;
 /** 面積が画像のこの割合未満の成分はゴミとして捨てる */
@@ -226,20 +228,34 @@ export function estimateBackground(lab: LabImage): Background {
   return { L, a, b, spread: medianOf(dE) };
 }
 
-/** 3×3 の窓での明度の標準偏差（画像の端では画像内の画素だけで計算） */
-function localStdL(lab: LabImage): Float32Array {
+/**
+ * 周囲 (2r+1)×(2r+1) の窓での明度の標準偏差。窓の中の「石の候補の画素（fg）」だけで計算し、
+ * 背景の画素は数えない（縁のくっきりした影でも、縁で「なめらかでない」と判定されないように）。
+ * fg でない画素は 0。累積和で計算するので窓の大きさによらず速い。
+ */
+function localStdOnMask(lab: LabImage, fg: Uint8Array, r: number): Float32Array {
   const { width: w, height: h, L } = lab;
+  const W1 = w + 1;
+  // 累積和（1画素ずらして持つ）: 個数・明度の和・明度の2乗の和
+  const C = new Float64Array(W1 * (h + 1)), S = new Float64Array(W1 * (h + 1)), S2 = new Float64Array(W1 * (h + 1));
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x, k = (y + 1) * W1 + x + 1;
+      const v = fg[i] ? L[i] : 0, c = fg[i] ? 1 : 0;
+      C[k] = c + C[k - 1] + C[k - W1] - C[k - W1 - 1];
+      S[k] = v + S[k - 1] + S[k - W1] - S[k - W1 - 1];
+      S2[k] = v * v + S2[k - 1] + S2[k - W1] - S2[k - W1 - 1];
+    }
+  const sum = (A: Float64Array, x0: number, y0: number, x1: number, y1: number) =>
+    A[y1 * W1 + x1] - A[y0 * W1 + x1] - A[y1 * W1 + x0] + A[y0 * W1 + x0];
   const out = new Float32Array(w * h);
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++) {
-      let s = 0, s2 = 0, k = 0;
-      for (let yy = Math.max(0, y - 1); yy <= Math.min(h - 1, y + 1); yy++)
-        for (let xx = Math.max(0, x - 1); xx <= Math.min(w - 1, x + 1); xx++) {
-          const v = L[yy * w + xx];
-          s += v; s2 += v * v; k++;
-        }
-      const m = s / k;
-      out[y * w + x] = Math.sqrt(Math.max(0, s2 / k - m * m));
+      if (!fg[y * w + x]) continue;
+      const x0 = Math.max(0, x - r), y0 = Math.max(0, y - r), x1 = Math.min(w, x + r + 1), y1 = Math.min(h, y + r + 1);
+      const n = sum(C, x0, y0, x1, y1);
+      const m = sum(S, x0, y0, x1, y1) / n;
+      out[y * w + x] = Math.sqrt(Math.max(0, sum(S2, x0, y0, x1, y1) / n - m * m));
     }
   return out;
 }
@@ -297,16 +313,17 @@ function hysteresis(dE: Float32Array, width: number, height: number, high: numbe
 
 /**
  * 影を外す（成分ごとに判断する）。
- * 影の条件（背景より暗い・色みの差が小さい・周囲3×3がなめらか）に当てはまる画素のうち、
+ * 影の条件（背景より暗い・色みの差が小さい・周囲5×5の石の候補の画素がなめらか）に当てはまる画素のうち、
  * 成分の外側の縁から、影の条件の画素だけをたどってつながっているものを影とする。
- * 石の縁は背景との差で「なめらか」にならないので、たどりは石の中に入らない。
- * それでも外した結果が元の成分の SHADOW_KEEP_RATIO 未満になる成分は、影を外さずそのまま残す
- * （縁のぼけた、模様の少ない灰色の石を丸ごと消さないため）。
+ * なめらかさは背景を数えずに見るので、縁のくっきりした影も縁からたどれる。
+ * 石と影の境目は明度の段差で「なめらかでない」ので、たどりは模様のある石の中に入らない。
+ * 外した結果が元の成分の SHADOW_KEEP_RATIO 未満になる成分は、影を外さずそのまま残す
+ * （模様のない灰色の石は縁からたどれてしまうので、丸ごと消さないため）。
  */
 function removeShadows(lab: LabImage, fg: Uint8Array, bg: Background): Uint8Array {
   const { width: w, height: h } = lab;
   const n = w * h;
-  const lstd = localStdL(lab);
+  const lstd = localStdOnMask(lab, fg, SHADOW_WINDOW_RADIUS);
   const isShadow = (i: number) =>
     lab.L[i] < bg.L &&
     Math.abs(lab.a[i] - bg.a) < SHADOW_MAX_CHROMA_DIFF &&
