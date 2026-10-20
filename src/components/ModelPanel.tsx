@@ -3,8 +3,9 @@ import {
   clearLocalModel,
   collectSamples,
   downloadModel,
-  loadModel,
+  loadModelStatus,
   MODEL_SOURCE_LABEL,
+  OUTDATED_MODEL_MESSAGE,
   saveModel,
   type ModelSource,
 } from "../analyze";
@@ -16,19 +17,23 @@ export function ModelPanel({ onJudge }: { onJudge: () => void }) {
   const [source, setSource] = useState<ModelSource | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [outdated, setOutdated] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    loadModel().then((r) => {
-      setModel(r?.model ?? null);
-      setSource(r?.source ?? null);
+    loadModelStatus().then(({ loaded, outdated }) => {
+      setModel(loaded?.model ?? null);
+      setSource(loaded?.source ?? null);
+      setOutdated(outdated);
     });
   }, []);
 
   async function train() {
     setError(null);
+    setNotice(null);
     setProgress("写真を解析中…");
     try {
-      const samples = await collectSamples((d, t) => setProgress(`写真を解析中… ${d} / ${t} 枚`));
+      const { samples, skipped } = await collectSamples((d, t) => setProgress(`写真を解析中… ${d} / ${t} 枚`));
       const ok = usableStones(samples);
       setProgress(`学習中…（石 ${ok.length} 個）`);
       await new Promise((r) => setTimeout(r, 30)); // 表示を更新させる
@@ -36,6 +41,8 @@ export function ModelPanel({ onJudge }: { onJudge: () => void }) {
       saveModel(m);
       setModel(m);
       setSource("local");
+      setOutdated(false);
+      if (skipped > 0) setNotice(`石を切り出せなかった写真 ${skipped} 枚は、学習に使っていません。`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -46,9 +53,11 @@ export function ModelPanel({ onJudge }: { onJudge: () => void }) {
   function reset() {
     if (!confirm("この端末で学習したモデルを削除しますか？公開版のモデルがあれば、以後はそれで判定します。")) return;
     clearLocalModel();
-    loadModel().then((r) => {
-      setModel(r?.model ?? null);
-      setSource(r?.source ?? null);
+    setNotice(null);
+    loadModelStatus().then(({ loaded, outdated }) => {
+      setModel(loaded?.model ?? null);
+      setSource(loaded?.source ?? null);
+      setOutdated(outdated);
     });
   }
 
@@ -65,6 +74,8 @@ export function ModelPanel({ onJudge }: { onJudge: () => void }) {
           <span className="meta">未学習</span>
         )}
       </div>
+      {!model && outdated && <p className="warnings warn">{OUTDATED_MODEL_MESSAGE}</p>}
+      {notice && <p className="meta">{notice}</p>}
       {progress && <p className="meta">{progress}</p>}
       {error && <p className="warnings bad">{error}</p>}
       <div className="row">

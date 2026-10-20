@@ -36,7 +36,7 @@ describe("features", () => {
     const w = 200, h = 150;
     const { features, mask } = extractFeatures(scene(w, h, [235, 232, 225]), w, h);
     expect(features.L).toBeGreaterThan(88);
-    expect(features.areaRatio).toBeGreaterThan(0.1);
+    expect(features.areaRatio).toBeGreaterThan(0.08); // 画像全体に対する割合
     // 影の中心（石と重ならない位置）は石と判定されない
     const sx = Math.round(w * 0.2), sy = Math.round(h * 0.65);
     expect(mask[sy * w + sx]).toBe(0);

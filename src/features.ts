@@ -16,11 +16,8 @@ export interface StoneFeatures {
   Lstd: number;
   spotRatio: number;
   texture: number;
-  areaRatio: number; // 解析範囲に占める石の割合（検出できたかの目安）
+  areaRatio: number; // 画像に占める石の割合（検出できたかの目安）
 }
-
-/** 解析範囲（撮影ガイドの「石」枠を少し広げた範囲）。右側の基準カードを避ける */
-export const ROI = { x0: 0.08, x1: 0.68, y0: 0.1, y1: 0.9 };
 
 function srgbToLinear(c: number): number {
   const v = c / 255;
@@ -66,11 +63,6 @@ export function otsu(values: ArrayLike<number>, min = 0, max = 100, bins = 128):
     if (between > best) { best = between; bestK = k; }
   }
   return min + (bestK + 1) * w;
-}
-
-export interface Extracted {
-  features: StoneFeatures;
-  mask: Uint8Array; // 画像全体サイズ。1=石
 }
 
 /** 画像全体の L*a*b* 画素 */
@@ -157,54 +149,29 @@ export function featuresFromMask(
   };
 }
 
-/**
- * RGBA 画素（縮小済み、長辺 ~400px）から特徴量を計算する。
- * 石は背景より明るい前提で、解析範囲内を大津の方法で二値化して石領域を取る。
- * 影は暗いので自動的に石領域から外れる。
- */
-export function extractFeatures(rgba: Uint8ClampedArray, width: number, height: number): Extracted {
-  const box: Box = {
-    x0: Math.floor(width * ROI.x0), x1: Math.ceil(width * ROI.x1),
-    y0: Math.floor(height * ROI.y0), y1: Math.ceil(height * ROI.y1),
-  };
-  const lab = toLab(rgba, width, height, box);
-  const roiL: number[] = [];
-  for (let y = box.y0; y < box.y1; y++)
-    for (let x = box.x0; x < box.x1; x++) roiL.push(lab.L[y * width + x]);
-  const t = otsu(roiL);
-  const mask = new Uint8Array(width * height);
-  for (let y = box.y0; y < box.y1; y++)
-    for (let x = box.x0; x < box.x1; x++) {
-      const i = y * width + x;
-      if (lab.L[i] >= t) mask[i] = 1;
-    }
-  const roiArea = (box.x1 - box.x0) * (box.y1 - box.y0);
-  return { features: featuresFromMask(lab, mask, box, roiArea), mask };
-}
+// ---- 石の切り出し（背景との色差方式 "bg-diff-1"） ----
+// 背景の色を画像の外周から推定し、背景と色が違う部分を石とする。
+// 背景が白でも黒でも、石が白くても茶色くても切り出せる。
 
-// ---- まとめて判定: 1枚の写真に並べた複数の石を切り出す ----
+/** 切り出し方式。学習時と判定時で同じでなければならない（Model.segmentation に記録して照合する） */
+export const SEGMENTATION = "bg-diff-1";
 
+/** 外周のこの幅（上下は高さ、左右は幅に対する割合）を背景とみなす */
+const BORDER_BAND = 0.05;
+/** 背景との色差のしきい値の下限（ΔE）。これより小さな差は石とみなさない */
+const MIN_DELTA_E = 8;
+/** しきい値は背景のばらつき（中央絶対偏差）のこの倍数以上にする */
+const BG_SPREAD_FACTOR = 3;
+/** 影の判定: 色み（a*, b*）の差がどちらもこれ未満 */
+const SHADOW_MAX_CHROMA_DIFF = 3;
+/** 影の判定: 周囲3×3の明度の標準偏差がこれ未満（影はなめらか。石には模様がある） */
+const SHADOW_MAX_LOCAL_STD = 2;
 /** 面積が画像のこの割合未満の成分はゴミとして捨てる */
 const MIN_STONE_AREA_RATIO = 0.003;
+/** 1個判定で石が画像のこの割合以上を占めたら、背景を石と誤認した可能性がある */
+export const MAX_SINGLE_STONE_AREA_RATIO = 0.3;
 /** 面積が中央値のこの倍数を超えたら「石がくっついている可能性」 */
 const MERGED_AREA_FACTOR = 2.5;
-
-export interface SegmentedStone {
-  index: number; // 1始まりの番号（上の行から、各行は左から右）
-  label: number; // labels 上の値
-  box: Box;
-  cx: number;
-  cy: number;
-  area: number;
-  maybeMerged: boolean;
-  features: StoneFeatures; // areaRatio は 石の画素数 / 画像全体
-}
-
-export interface Segmentation {
-  stones: SegmentedStone[];
-  labels: Int32Array; // 画像全体サイズ。0=背景、それ以外=成分ラベル（除外した成分も含む）
-  threshold: number;
-}
 
 /** 3×3 の収縮（近傍がすべて1なら1）または膨張（近傍に1があれば1）。画像外の画素は見ない */
 function morph3(src: Uint8Array, width: number, height: number, erode: boolean): Uint8Array {
@@ -227,29 +194,138 @@ function median(values: number[]): number {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
-/**
- * 暗い背景に隙間をあけて並べた石を1個ずつ切り出し、それぞれの特徴量を計算する。
- * 画像全体を L* で大津の二値化 → 3×3 オープニング → 4近傍の連結成分。
- * 小さすぎる成分と、画像の端に接した成分（見切れた石や背景の外）は除外する。
- */
-export function segmentStones(rgba: Uint8ClampedArray, width: number, height: number): Segmentation {
-  const n = width * height;
-  const lab = toLab(rgba, width, height);
-  const threshold = otsu(lab.L);
-  let bin: Uint8Array = new Uint8Array(n);
-  for (let i = 0; i < n; i++) if (lab.L[i] >= threshold) bin[i] = 1;
-  bin = morph3(morph3(bin, width, height, true), width, height, false);
+export interface Background {
+  L: number;
+  a: number;
+  b: number;
+  spread: number; // 外周の画素の、背景色からの色差 ΔE の中央値（中央絶対偏差）
+}
 
-  // 4近傍の連結成分（再帰は深くなりすぎるのでスタックで塗りつぶす）
+function medianOf(values: Float32Array): number {
+  if (values.length === 0) return 0;
+  const s = Float32Array.from(values).sort();
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+/** 画像の外周の帯を背景とみなし、その色（L*a*b* の中央値）とばらつきを求める */
+export function estimateBackground(lab: LabImage): Background {
+  const { width: w, height: h } = lab;
+  const bx = Math.max(1, Math.round(w * BORDER_BAND));
+  const by = Math.max(1, Math.round(h * BORDER_BAND));
+  const idx: number[] = [];
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) if (x < bx || x >= w - bx || y < by || y >= h - by) idx.push(y * w + x);
+  const pick = (c: Float32Array) => Float32Array.from(idx, (i) => c[i]);
+  const L = medianOf(pick(lab.L)), a = medianOf(pick(lab.a)), b = medianOf(pick(lab.b));
+  const dE = Float32Array.from(idx, (i) => Math.hypot(lab.L[i] - L, lab.a[i] - a, lab.b[i] - b));
+  return { L, a, b, spread: medianOf(dE) };
+}
+
+/** 3×3 の窓での明度の標準偏差（画像の端では画像内の画素だけで計算） */
+function localStdL(lab: LabImage): Float32Array {
+  const { width: w, height: h, L } = lab;
+  const out = new Float32Array(w * h);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      let s = 0, s2 = 0, k = 0;
+      for (let yy = Math.max(0, y - 1); yy <= Math.min(h - 1, y + 1); yy++)
+        for (let xx = Math.max(0, x - 1); xx <= Math.min(w - 1, x + 1); xx++) {
+          const v = L[yy * w + xx];
+          s += v; s2 += v * v; k++;
+        }
+      const m = s / k;
+      out[y * w + x] = Math.sqrt(Math.max(0, s2 / k - m * m));
+    }
+  return out;
+}
+
+/** 外周とつながっていない背景（成分の内部の穴）を埋める */
+function fillHoles(src: Uint8Array, width: number, height: number): Uint8Array {
+  const n = width * height;
+  const outside = new Uint8Array(n);
+  const stack = new Int32Array(n);
+  let sp = 0;
+  const push = (i: number) => {
+    if (!src[i] && !outside[i]) { outside[i] = 1; stack[sp++] = i; }
+  };
+  for (let x = 0; x < width; x++) { push(x); push((height - 1) * width + x); }
+  for (let y = 0; y < height; y++) { push(y * width); push(y * width + width - 1); }
+  while (sp > 0) {
+    const i = stack[--sp];
+    const x = i % width, y = (i - x) / width;
+    if (x > 0) push(i - 1);
+    if (x < width - 1) push(i + 1);
+    if (y > 0) push(i - width);
+    if (y < height - 1) push(i + width);
+  }
+  const out = new Uint8Array(n);
+  for (let i = 0; i < n; i++) out[i] = outside[i] ? 0 : 1;
+  return out;
+}
+
+export interface Foreground {
+  mask: Uint8Array; // 1=石の候補
+  threshold: number; // 使った ΔE のしきい値
+  background: Background;
+}
+
+/**
+ * 背景と色が違う画素を石の候補にする。
+ * 1. 外周から背景色を推定し、各画素の背景色との色差 ΔE を計算
+ * 2. ΔE を大津の方法で二値化（しきい値は 背景のばらつき×3 と ΔE=8 の大きい方が下限）
+ * 3. 背景より暗く、色みがほぼ同じで、なめらかな画素は影として外す
+ * 4. オープニング（細い線・小さな点を消す）→ クロージング（小さな隙間を閉じる）→ 内部の穴埋め
+ *    影を外したあとに残る1画素幅の縁取りが穴埋めで影を囲い直さないよう、オープニングを先にする
+ */
+export function foregroundMask(lab: LabImage): Foreground {
+  const { width: w, height: h } = lab;
+  const n = w * h;
+  const bg = estimateBackground(lab);
+  const dE = new Float32Array(n);
+  let maxDE = 0;
+  for (let i = 0; i < n; i++) {
+    dE[i] = Math.hypot(lab.L[i] - bg.L, lab.a[i] - bg.a, lab.b[i] - bg.b);
+    if (dE[i] > maxDE) maxDE = dE[i];
+  }
+  const threshold = Math.max(otsu(dE, 0, Math.max(maxDE, 1)), BG_SPREAD_FACTOR * bg.spread, MIN_DELTA_E);
+  const lstd = localStdL(lab);
+  let mask: Uint8Array = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    if (dE[i] < threshold) continue;
+    const shadow =
+      lab.L[i] < bg.L &&
+      Math.abs(lab.a[i] - bg.a) < SHADOW_MAX_CHROMA_DIFF &&
+      Math.abs(lab.b[i] - bg.b) < SHADOW_MAX_CHROMA_DIFF &&
+      lstd[i] < SHADOW_MAX_LOCAL_STD;
+    if (!shadow) mask[i] = 1;
+  }
+  mask = morph3(morph3(mask, w, h, true), w, h, false); // オープニング
+  mask = morph3(morph3(mask, w, h, false), w, h, true); // クロージング
+  mask = fillHoles(mask, w, h);
+  return { mask, threshold, background: bg };
+}
+
+interface Component {
+  label: number;
+  area: number;
+  sx: number;
+  sy: number;
+  box: Box;
+  edge: boolean; // 画像の外周に接している
+}
+
+/** 4近傍の連結成分（再帰は深くなりすぎるのでスタックで塗りつぶす） */
+function components(bin: Uint8Array, width: number, height: number): { labels: Int32Array; comps: Component[] } {
+  const n = width * height;
   const labels = new Int32Array(n);
   const stack = new Int32Array(n);
-  type Comp = { label: number; area: number; sx: number; sy: number; box: Box; edge: boolean };
-  const comps: Comp[] = [];
+  const comps: Component[] = [];
   let next = 0;
   for (let start = 0; start < n; start++) {
     if (!bin[start] || labels[start]) continue;
     const label = ++next;
-    const c: Comp = { label, area: 0, sx: 0, sy: 0, box: { x0: width, y0: height, x1: 0, y1: 0 }, edge: false };
+    const c: Component = { label, area: 0, sx: 0, sy: 0, box: { x0: width, y0: height, x1: 0, y1: 0 }, edge: false };
     let sp = 0;
     stack[sp++] = start;
     labels[start] = label;
@@ -269,9 +345,82 @@ export function segmentStones(rgba: Uint8ClampedArray, width: number, height: nu
     }
     comps.push(c);
   }
+  return { labels, comps };
+}
+
+/**
+ * 切り出しの結果。
+ * ok: 石を切り出せた / none: 石が見つからない / tooLarge: 石が大きすぎる（背景を石と誤認した可能性）
+ */
+export type SegmentStatus = "ok" | "none" | "tooLarge";
+
+export interface Extracted {
+  features: StoneFeatures;
+  mask: Uint8Array; // 画像全体サイズ。1=石
+  status: SegmentStatus;
+}
+
+/**
+ * 1個判定: RGBA 画素（縮小済み、長辺 ~400px）から石を1個切り出して特徴量を計算する。
+ * 画像の外周に接していない成分のうち、最も大きいものを石とする。
+ */
+export function extractFeatures(rgba: Uint8ClampedArray, width: number, height: number): Extracted {
+  const n = width * height;
+  const lab = toLab(rgba, width, height);
+  const { mask: fg } = foregroundMask(lab);
+  const { labels, comps } = components(fg, width, height);
+  const stone = comps
+    .filter((c) => !c.edge && c.area >= n * MIN_STONE_AREA_RATIO)
+    .reduce<Component | null>((best, c) => (!best || c.area > best.area ? c : best), null);
+  const mask = new Uint8Array(n);
+  if (!stone) {
+    return { features: featuresFromMask(lab, mask, { x0: 0, y0: 0, x1: width, y1: height }, n), mask, status: "none" };
+  }
+  for (let i = 0; i < n; i++) if (labels[i] === stone.label) mask[i] = 1;
+  return {
+    features: featuresFromMask(lab, mask, stone.box, n),
+    mask,
+    status: stone.area >= n * MAX_SINGLE_STONE_AREA_RATIO ? "tooLarge" : "ok",
+  };
+}
+
+// ---- まとめて判定: 1枚の写真に並べた複数の石を切り出す ----
+
+export interface SegmentedStone {
+  index: number; // 1始まりの番号（上の行から、各行は左から右）
+  label: number; // labels 上の値
+  box: Box;
+  cx: number;
+  cy: number;
+  area: number;
+  maybeMerged: boolean;
+  features: StoneFeatures; // areaRatio は 石の画素数 / 画像全体
+}
+
+export interface Segmentation {
+  stones: SegmentedStone[];
+  labels: Int32Array; // 画像全体サイズ。0=背景、それ以外=成分ラベル（除外した成分も含む）
+  threshold: number; // 使った ΔE のしきい値
+  /** 外周に接して除外した成分の合計面積が、残った石の合計より大きい（背景を誤認した可能性） */
+  suspicious: boolean;
+}
+
+/**
+ * 背景の上に隙間をあけて並べた石を1個ずつ切り出し、それぞれの特徴量を計算する。
+ * 切り出し方は1個判定と同じ（foregroundMask）。小さすぎる成分と、画像の外周に接した成分
+ * （見切れた石や、背景の外の机など）は除外する。
+ */
+export function segmentStones(rgba: Uint8ClampedArray, width: number, height: number): Segmentation {
+  const n = width * height;
+  const lab = toLab(rgba, width, height);
+  const { mask: fg, threshold } = foregroundMask(lab);
+  const { labels, comps } = components(fg, width, height);
 
   const kept = comps.filter((c) => c.area >= n * MIN_STONE_AREA_RATIO && !c.edge);
-  if (kept.length === 0) return { stones: [], labels, threshold };
+  const edgeArea = comps.filter((c) => c.edge).reduce((s, c) => s + c.area, 0);
+  const keptArea = kept.reduce((s, c) => s + c.area, 0);
+  const suspicious = edgeArea > keptArea;
+  if (kept.length === 0) return { stones: [], labels, threshold, suspicious };
 
   const medArea = median(kept.map((c) => c.area));
   const rowTol = median(kept.map((c) => c.box.y1 - c.box.y0)) / 2;
@@ -296,7 +445,7 @@ export function segmentStones(rgba: Uint8ClampedArray, width: number, height: nu
     maybeMerged: c.area > medArea * MERGED_AREA_FACTOR,
     features: featuresFromMask(lab, labels, c.box, n, c.label),
   }));
-  return { stones, labels, threshold };
+  return { stones, labels, threshold, suspicious };
 }
 
 /** 乾燥写真1枚から、モデルに入れるベクトルを作る（FEATURE_NAMES と同じ順） */

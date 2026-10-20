@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { analyzeBatchBlob, type BatchAnalysis } from "../analyze";
+import { analyzeBatchBlob, SEGMENT_WARNING, type BatchAnalysis } from "../analyze";
 import { judgeStones, pairSides, type PairedRow, type StoneJudgement } from "../batch";
 import type { Captured } from "../capture";
 import type { Box } from "../features";
@@ -92,7 +92,7 @@ export function BatchJudge({ model, onBack, modeSwitch, modelInfo }: Props) {
         showGuide={false}
         hint={
           isFront
-            ? "暗い背景に、石どうしが触れないよう隙間をあけて並べ、全体を撮影してください（基準カードは写さない）"
+            ? "石と違う色の無地の背景に、石どうしが触れないよう隙間をあけて並べ、背景が画面いっぱいに写るように撮影してください（基準カードは写さない）"
             : "石をその場で裏返し、同じ位置から撮影してください"
         }
         onCaptured={(c) => onCaptured(key, c)}
@@ -111,7 +111,8 @@ function buildResult(model: Model, f: Captured, fa: BatchAnalysis, b: Captured |
   const warnings: string[] = [];
   const side = (key: PhotoKey, photo: Captured, analysis: BatchAnalysis): Side => {
     const name = SIDE_NAME[key];
-    if (analysis.stones.length === 0) warnings.push(`${name}の写真で石が見つかりませんでした。暗い背景の上で撮り直してください。`);
+    if (analysis.stones.length === 0) warnings.push(`${name}の写真で石が見つかりませんでした。${SEGMENT_WARNING}`);
+    else if (analysis.suspicious) warnings.push(`${name}の写真: ${SEGMENT_WARNING}背景が画面いっぱいに写るようにしてください。`);
     const merged = analysis.stones.filter((s) => s.maybeMerged).map((s) => `${s.index}番`);
     if (merged.length)
       warnings.push(`${name}の ${merged.join("・")} は、石どうしがくっついている可能性があります。隙間をあけて撮り直してください。`);
