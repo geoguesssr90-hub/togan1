@@ -1,1 +1,0 @@
-{"root":["./src/capture.ts","./src/db.ts","./src/exportzip.ts","./src/logic.test.ts","./src/main.tsx","./src/quality.ts","./src/resize.ts","./src/types.ts","./src/components/bulkimport.tsx","./src/components/camera.tsx","./src/components/home.tsx","./src/components/stonedetail.tsx","./vite.config.ts"],"version":"5.9.3"}
