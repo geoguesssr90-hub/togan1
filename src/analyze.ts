@@ -1,5 +1,5 @@
 /** ブラウザ側: 画像Blobを縮小して特徴量を取り出す。学習時と判定時で同じ関数を使う。 */
-import { extractFeatures, segmentStones, type SegmentedStone, type SegmentStatus, type StoneFeatures } from "./features";
+import { extractFeatures, segmentStones, type SegmentedStone, type StoneFeatures } from "./features";
 import { listShots, listStones } from "./db";
 import { isModel, type Model, type StoneSamples } from "./model";
 
@@ -7,7 +7,6 @@ const ANALYSIS_LONG_SIDE = 400;
 
 export interface Analysis {
   features: StoneFeatures;
-  status: SegmentStatus; // ok 以外は、背景と石を区別できなかった可能性がある
   maskPreview?: string; // 石と認識した範囲を色付けした画像（確認用）
 }
 
@@ -23,8 +22,8 @@ export async function analyzeBlob(blob: Blob, withPreview = false): Promise<Anal
     const ctx = c.getContext("2d", { willReadFrequently: true })!;
     ctx.drawImage(bmp, 0, 0, w, h);
     const img = ctx.getImageData(0, 0, w, h);
-    const { features, mask, status } = extractFeatures(img.data, w, h);
-    if (!withPreview) return { features, status };
+    const { features, mask } = extractFeatures(img.data, w, h);
+    if (!withPreview) return { features };
     const d = img.data;
     for (let i = 0; i < mask.length; i++) {
       if (mask[i]) {
@@ -38,7 +37,7 @@ export async function analyzeBlob(blob: Blob, withPreview = false): Promise<Anal
       }
     }
     ctx.putImageData(img, 0, 0);
-    return { features, status, maskPreview: c.toDataURL("image/jpeg", 0.85) };
+    return { features, maskPreview: c.toDataURL("image/jpeg", 0.85) };
   } finally {
     bmp.close();
   }
@@ -54,7 +53,6 @@ export interface BatchAnalysis {
   width: number; // 解析した画像の大きさ（stones の座標はこの大きさ基準）
   height: number;
   stones: SegmentedStone[];
-  suspicious: boolean; // 背景と石を区別できなかった可能性がある
 }
 
 export async function analyzeBatchBlob(blob: Blob): Promise<BatchAnalysis> {
@@ -68,40 +66,34 @@ export async function analyzeBatchBlob(blob: Blob): Promise<BatchAnalysis> {
     c.height = h;
     const ctx = c.getContext("2d", { willReadFrequently: true })!;
     ctx.drawImage(bmp, 0, 0, w, h);
-    const { stones, suspicious } = segmentStones(ctx.getImageData(0, 0, w, h).data, w, h);
-    return { width: w, height: h, stones, suspicious };
+    const { stones } = segmentStones(ctx.getImageData(0, 0, w, h).data, w, h);
+    return { width: w, height: h, stones };
   } finally {
     bmp.close();
   }
 }
 
-/**
- * 保存済みの写真のうち condition が "dry" のものだけから特徴量を作る（順番に処理してメモリを節約）。
- * 石を切り出せなかった写真（見つからない・大きすぎる）は学習に使わず、skipped に数える。
- */
-export async function collectSamples(
-  onProgress: (done: number, total: number) => void,
-): Promise<{ samples: StoneSamples[]; skipped: number }> {
+/** 保存済みの写真のうち condition が "dry" のものだけから特徴量を作る（順番に処理してメモリを節約） */
+export async function collectSamples(onProgress: (done: number, total: number) => void): Promise<StoneSamples[]> {
   const [stones, allShots] = await Promise.all([listStones(), listShots()]);
   const shots = allShots.filter((s) => s.condition === "dry");
   const byStone = new Map<string, StoneSamples>(
     stones.map((s) => [s.id, { stoneId: s.id, grade: s.grade, dry: [] }]),
   );
-  let done = 0, skipped = 0;
+  let done = 0;
   for (const shot of shots) {
     const target = byStone.get(shot.stoneId);
     if (target) {
       try {
-        const { features, status } = await analyzeBlob(shot.blob);
-        if (status === "ok") target.dry.push(features);
-        else skipped++;
+        const { features } = await analyzeBlob(shot.blob);
+        if (features.areaRatio > 0.01) target.dry.push(features);
       } catch {
-        skipped++; // 読めない画像は飛ばす
+        /* 読めない画像は飛ばす */
       }
     }
     onProgress(++done, shots.length);
   }
-  return { samples: [...byStone.values()], skipped };
+  return [...byStone.values()];
 }
 
 const KEY = "togan-model-v2";
@@ -136,47 +128,27 @@ export function describeModel(model: Model, source: ModelSource): string {
  * 公開版に戻すときは「端末のモデルを削除」を使う。形式が古い・壊れた端末のモデルは無視して公開版を使う。
  * public/model.json は Service Worker が事前キャッシュするので、オフラインでも読める。
  */
-export async function loadModel(): Promise<LoadedModel | null> {
-  return (await loadModelStatus()).loaded;
-}
-
-export interface LoadedModel {
-  model: Model;
-  source: ModelSource;
-}
-
-/**
- * loadModel と同じ順でモデルを探し、使えるモデルがなかった場合は、古い形式のモデルが
- * あったか（outdated）も返す。「学習し直してください」の表示に使う。
- */
-export async function loadModelStatus(): Promise<{ loaded: LoadedModel | null; outdated: boolean }> {
-  let outdated = false;
-  const check = (m: unknown, source: ModelSource): LoadedModel | null => {
-    if (isModel(m)) return { model: m, source };
-    if (m && typeof m === "object") outdated = true; // 読めたが、今の形式ではない
-    return null;
-  };
+export async function loadModel(): Promise<{ model: Model; source: ModelSource } | null> {
   try {
     const raw = localStorage.getItem(KEY);
-    const r = raw ? check(JSON.parse(raw), "local") : null;
-    if (r) return { loaded: r, outdated: false };
-  } catch {
-    /* 壊れた保存データは無視する */
-  }
-  try {
-    const res = await fetch("/model.json", { cache: "no-store" });
-    const r = res.ok ? check(await res.json(), "bundled") : null;
-    if (r) return { loaded: r, outdated: false };
+    if (raw) {
+      const m = JSON.parse(raw);
+      if (isModel(m)) return { model: m, source: "local" };
+    }
   } catch {
     /* noop */
   }
-  return { loaded: null, outdated };
+  try {
+    const res = await fetch("/model.json", { cache: "no-store" });
+    if (res.ok) {
+      const m = await res.json();
+      if (isModel(m)) return { model: m, source: "bundled" };
+    }
+  } catch {
+    /* noop */
+  }
+  return null;
 }
-
-export const OUTDATED_MODEL_MESSAGE = "モデルの形式が古いため、学習し直してください";
-
-/** 石を切り出せなかったときの案内（1個判定・まとめて判定で共通） */
-export const SEGMENT_WARNING = "背景と石を区別できませんでした。背景を石と違う色にするか、石を中央に置いて撮り直してください。";
 
 export function clearLocalModel() {
   try {

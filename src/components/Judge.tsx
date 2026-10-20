@@ -1,13 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import {
-  analyzeBlob,
-  describeModel,
-  loadModelStatus,
-  OUTDATED_MODEL_MESSAGE,
-  SEGMENT_WARNING,
-  type Analysis,
-  type LoadedModel,
-} from "../analyze";
+import { analyzeBlob, describeModel, loadModel, type Analysis, type ModelSource } from "../analyze";
 import type { Captured } from "../capture";
 import { predict, type Model } from "../model";
 import { BatchJudge } from "./BatchJudge";
@@ -24,15 +16,11 @@ type Mode = "single" | "batch";
 const MODE_LABEL: Record<Mode, string> = { single: "1個ずつ", batch: "まとめて" };
 
 export function Judge({ onBack }: { onBack: () => void }) {
-  const [loaded, setLoaded] = useState<LoadedModel | null | undefined>(undefined);
-  const [outdated, setOutdated] = useState(false);
+  const [loaded, setLoaded] = useState<{ model: Model; source: ModelSource } | null | undefined>(undefined);
   const [mode, setMode] = useState<Mode>("single");
 
   useEffect(() => {
-    loadModelStatus().then((r) => {
-      setLoaded(r.loaded);
-      setOutdated(r.outdated);
-    });
+    loadModel().then(setLoaded);
   }, []);
 
   if (loaded === undefined) return <div className="screen"><p className="meta">モデルを読み込み中…</p></div>;
@@ -42,11 +30,7 @@ export function Judge({ onBack }: { onBack: () => void }) {
       <div className="screen">
         <button className="back" onClick={onBack}>← 一覧</button>
         <h2>判定</h2>
-        {outdated ? (
-          <p className="warnings warn">{OUTDATED_MODEL_MESSAGE}。一覧画面の「学習し直す」を実行してください。</p>
-        ) : (
-          <p>まだ判定用のモデルがありません。一覧画面の「モデルを学習する」を先に実行してください。</p>
-        )}
+        <p>まだ判定用のモデルがありません。一覧画面の「モデルを学習する」を先に実行してください。</p>
       </div>
     );
   }
@@ -122,11 +106,7 @@ function SingleJudge({ model, onBack, modeSwitch, modelInfo }: ModeProps) {
           <span>2 結果</span>
         </div>
         {error && <p className="warnings bad">{error}</p>}
-        <Camera
-          hint="乾いた石を、石と違う色の無地の背景の中央に置いて撮影してください"
-          onCaptured={onCaptured}
-          onCancel={onBack}
-        />
+        <Camera hint="乾いた状態の石を撮影してください" onCaptured={onCaptured} onCancel={onBack} />
       </div>
     );
   }
@@ -135,21 +115,8 @@ function SingleJudge({ model, onBack, modeSwitch, modelInfo }: ModeProps) {
     return <div className="screen"><p className="meta">解析中…</p></div>;
   }
 
-  // 石が見つからないときは判定しない（背景や空の画像を判定しても意味がない）
-  if (shot.analysis.status === "none") {
-    return (
-      <div className="screen">
-        <button className="back" onClick={onBack}>← 一覧</button>
-        <h2>石が見つかりませんでした</h2>
-        <p className="warnings warn">{SEGMENT_WARNING}</p>
-        <img className="mask-one" src={shot.analysis.maskPreview} alt="撮影した写真" />
-        <button className="primary wide" onClick={restart}>撮り直す</button>
-      </div>
-    );
-  }
-
   const f = shot.analysis.features;
-  const tooLarge = shot.analysis.status === "tooLarge";
+  const lowArea = f.areaRatio < 0.03;
   const probs = predict(model, f);
   const top = probs.reduce((p, q) => (q.prob > p.prob ? q : p));
 
@@ -180,7 +147,7 @@ function SingleJudge({ model, onBack, modeSwitch, modelInfo }: ModeProps) {
         ))}
       </div>
 
-      {tooLarge && <p className="warnings warn">{SEGMENT_WARNING}（石として認識した範囲が画面の30%以上あります）</p>}
+      {lowArea && <p className="warnings warn">石を十分に検出できていません。石を画面の枠いっぱいに写してください。</p>}
 
       <h3>判定の根拠</h3>
       <table className="summary">

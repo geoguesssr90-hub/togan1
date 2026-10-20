@@ -3,11 +3,10 @@
  * データが少ない段階でも学習でき、どの特徴が効いたかを説明しやすい。
  * データが増えたら CNN に置き換える想定（入出力の形はそのまま使える）。
  */
-import { FEATURE_NAMES, featureVector, SEGMENTATION, type StoneFeatures } from "./features";
+import { FEATURE_NAMES, featureVector, type StoneFeatures } from "./features";
 
 export interface Model {
   version: 2;
-  segmentation: typeof SEGMENTATION; // 学習に使った石の切り出し方式。判定時と同じでなければ使えない
   grades: string[];
   featureNames: string[];
   mean: number[];
@@ -137,7 +136,6 @@ export function trainModel(all: StoneSamples[]): Model {
 
   return {
     version: 2,
-    segmentation: SEGMENTATION,
     grades,
     featureNames: FEATURE_NAMES,
     ...fitted,
@@ -150,13 +148,11 @@ export function trainModel(all: StoneSamples[]): Model {
 
 /**
  * 読み込んだデータが、今のコードで使えるモデルかを確かめる。
- * 特徴量の数・順番（featureNames）が FEATURE_NAMES と違うモデルや、石の切り出し方式（segmentation）が
- * 今と違うモデルは、読めても誤った判定になるので受け付けない。
+ * 特徴量の数・順番（featureNames）が FEATURE_NAMES と違うモデルは、読めても誤った判定になるので受け付けない。
  */
 export function isModel(v: unknown): v is Model {
   const m = v as Model;
-  if (!m || m.version !== 2 || m.segmentation !== SEGMENTATION) return false;
-  if (!Array.isArray(m.grades) || m.grades.length < 2) return false;
+  if (!m || m.version !== 2 || !Array.isArray(m.grades) || m.grades.length < 2) return false;
   const d = FEATURE_NAMES.length;
   const numbers = (a: unknown, n: number) =>
     Array.isArray(a) && a.length === n && a.every((x) => typeof x === "number" && Number.isFinite(x));

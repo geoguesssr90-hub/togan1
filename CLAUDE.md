@@ -17,7 +17,7 @@
 ## 判定（試作）
 - モデル: 乾燥写真1枚から取る6つの特徴量（L, a, b, Lstd, spotRatio, texture）による多クラス・ロジスティック回帰。検証は石単位の1個抜き
 - 1個ずつ: 石を1枚撮って判定
-- まとめて: 石と違う色の無地の背景に石を隙間をあけて並べ、表と裏の2枚を撮る（裏は省略可）。1個ずつ切り出し、番号順に表と裏を対応させる。総合は悪い方の等級
+- まとめて: 暗い背景に石を隙間をあけて並べ、表と裏の2枚を撮る（裏は省略可）。1個ずつ切り出し、番号順に表と裏を対応させる。総合は悪い方の等級
 - 未確認の前提: 等級は数字が大きいほど品質が低い（`worseGrade`）。現場の区分と合っているか要確認
 
 ## 技術
@@ -32,7 +32,7 @@
 - `src/resize.ts` 長辺上限に収める寸法計算（純粋関数）
 - `src/db.ts` IndexedDB
 - `src/exportZip.ts` 学習用ZIP: `images/grade_{等級}/{石ID}/{dry|wet}_{連番}.jpg` + `metadata.csv` + `stones.csv`
-- `src/features.ts` 石の切り出しと特徴量の抽出。切り出しは背景との色差方式（外周から背景色を推定 → ΔE を大津の二値化 → 影を除去）。1個判定は `extractFeatures`、まとめて判定は `segmentStones`。方式を変えたら `SEGMENTATION` を変え、モデルを学習し直す
+- `src/features.ts` 特徴量の抽出（1個判定の `extractFeatures`、まとめて判定の切り出し `segmentStones`）
 - `src/model.ts` ロジスティック回帰の学習・予測
 - `src/batch.ts` まとめて判定の石ごとの判定、表と裏の対応付け、`worseGrade`
 - `src/analyze.ts` ブラウザ側の画像解析、学習データの収集、モデルの保存・読み込み
