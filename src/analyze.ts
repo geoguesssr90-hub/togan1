@@ -1,5 +1,12 @@
 /** ブラウザ側: 画像Blobを縮小して特徴量を取り出す。学習時と判定時で同じ関数を使う。 */
-import { extractFeatures, segmentStones, type SegmentedStone, type SegmentStatus, type StoneFeatures } from "./features";
+import {
+  extractFeatures,
+  segmentStones,
+  usableForTraining,
+  type SegmentedStone,
+  type SegmentStatus,
+  type StoneFeatures,
+} from "./features";
 import { listShots, listStones } from "./db";
 import { isModel, type Model, type StoneSamples } from "./model";
 
@@ -77,7 +84,7 @@ export async function analyzeBatchBlob(blob: Blob): Promise<BatchAnalysis> {
 
 /**
  * 保存済みの写真のうち condition が "dry" のものだけから特徴量を作る（順番に処理してメモリを節約）。
- * 石を切り出せなかった写真（見つからない・大きすぎる）は学習に使わず、skipped に数える。
+ * 石が見つからなかった写真は学習に使わず、skipped に数える（大きすぎるという警告の出る写真は使う）。
  */
 export async function collectSamples(
   onProgress: (done: number, total: number) => void,
@@ -93,7 +100,7 @@ export async function collectSamples(
     if (target) {
       try {
         const { features, status } = await analyzeBlob(shot.blob);
-        if (status === "ok") target.dry.push(features);
+        if (usableForTraining(status)) target.dry.push(features);
         else skipped++;
       } catch {
         skipped++; // 読めない画像は飛ばす

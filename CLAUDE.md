@@ -32,7 +32,7 @@
 - `src/resize.ts` 長辺上限に収める寸法計算（純粋関数）
 - `src/db.ts` IndexedDB
 - `src/exportZip.ts` 学習用ZIP: `images/grade_{等級}/{石ID}/{dry|wet}_{連番}.jpg` + `metadata.csv` + `stones.csv`
-- `src/features.ts` 石の切り出しと特徴量の抽出。切り出しは背景との色差方式（外周から背景色を推定 → ΔE を大津の二値化 → 影を除去）。1個判定は `extractFeatures`、まとめて判定は `segmentStones`。方式を変えたら `SEGMENTATION` を変え、モデルを学習し直す
+- `src/features.ts` 石の切り出しと特徴量の抽出。切り出しは背景との色差方式（外周から背景色を推定 → ΔE をヒステリシスで二値化 → 影を成分の外側の縁からたどって除去）。1個判定は `extractFeatures`、まとめて判定は `segmentStones`。方式を変えたら `SEGMENTATION` を変え、モデルを学習し直す
 - `src/model.ts` ロジスティック回帰の学習・予測
 - `src/batch.ts` まとめて判定の石ごとの判定、表と裏の対応付け、`worseGrade`
 - `src/analyze.ts` ブラウザ側の画像解析、学習データの収集、モデルの保存・読み込み
