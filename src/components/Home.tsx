@@ -64,7 +64,7 @@ export function Home({ onOpen, onJudge }: { onOpen: (s: Stone) => void; onJudge:
     }
   }
 
-  const per = (id: string, c?: "dry" | "wet") => shots.filter((s) => s.stoneId === id && (!c || s.condition === c)).length;
+  const per = (id: string) => shots.filter((s) => s.stoneId === id).length;
   const usedGrades = GRADES.filter((g) => stones.some((s) => s.grade === g));
 
   return (
@@ -77,14 +77,14 @@ export function Home({ onOpen, onJudge }: { onOpen: (s: Stone) => void; onJudge:
       {usedGrades.length > 0 && (
         <table className="summary">
           <thead>
-            <tr><th>等級</th><th>石</th><th>乾燥</th><th>湿潤</th></tr>
+            <tr><th>等級</th><th>石</th><th>写真</th></tr>
           </thead>
           <tbody>
             {usedGrades.map((g) => {
               const ids = stones.filter((s) => s.grade === g).map((s) => s.id);
-              const c = (cond: "dry" | "wet") => shots.filter((s) => ids.includes(s.stoneId) && s.condition === cond).length;
+              const n = shots.filter((s) => ids.includes(s.stoneId)).length;
               return (
-                <tr key={g}><td>{g}等級</td><td>{ids.length}</td><td>{c("dry")}</td><td>{c("wet")}</td></tr>
+                <tr key={g}><td>{g}等級</td><td>{ids.length}</td><td>{n}</td></tr>
               );
             })}
           </tbody>
@@ -117,7 +117,7 @@ export function Home({ onOpen, onJudge }: { onOpen: (s: Stone) => void; onJudge:
             <button className="stone-open" onClick={() => onOpen(s)}>
               <strong>{s.id}</strong>
               <span className="grade">{s.grade}等級</span>
-              <span className="counts">乾 {per(s.id, "dry")} / 湿 {per(s.id, "wet")}</span>
+              <span className="counts">写真 {per(s.id)}枚</span>
             </button>
             <button className="x" onClick={() => remove(s)} aria-label={`${s.id}を削除`}>削除</button>
           </li>

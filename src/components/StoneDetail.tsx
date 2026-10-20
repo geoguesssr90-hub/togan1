@@ -2,13 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { deleteShot, listShots, putShot } from "../db";
 import { newId, type Captured } from "../capture";
 import { judgeQuality } from "../quality";
-import { CONDITION_LABEL, type Condition, type Shot, type Stone } from "../types";
+import { CONDITION_LABEL, type Shot, type Stone } from "../types";
 import { BulkImport } from "./BulkImport";
 import { Camera } from "./Camera";
 
 export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => void }) {
   const [shots, setShots] = useState<Shot[]>([]);
-  const [condition, setCondition] = useState<Condition>("dry");
   const [hasCard, setHasCard] = useState(true);
   const [mode, setMode] = useState<"list" | "camera">("list");
   const [pending, setPending] = useState<Captured | null>(null);
@@ -23,14 +22,12 @@ export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => voi
   const urls = useMemo(() => new Map(shots.map((s) => [s.id, URL.createObjectURL(s.blob)])), [shots]);
   useEffect(() => () => urls.forEach((u) => URL.revokeObjectURL(u)), [urls]);
 
-  const count = (c: Condition) => shots.filter((s) => s.condition === c).length;
-
   async function save() {
     if (!pending) return;
     await putShot({
       id: newId(),
       stoneId: stone.id,
-      condition,
+      condition: "dry", // 湿潤の撮影は廃止。既存データとの互換のためフィールドは残す
       face: "", // 面の入力は廃止。既存データとの互換のためフィールドは残す
       hasReferenceCard: hasCard,
       width: pending.width,
@@ -65,7 +62,7 @@ export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => voi
         <h2>確認</h2>
         <img className="review" src={pending.previewUrl} alt="撮影した写真" />
         <p className="meta">
-          {stone.id} / {stone.grade}等級 / {CONDITION_LABEL[condition]}
+          {stone.id} / {stone.grade}等級
         </p>
         {warnings.length === 0 ? (
           <p className="ok">画質チェック: 問題なし</p>
@@ -88,13 +85,6 @@ export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => voi
 
   const settings = (
     <div className="settings">
-      <div className="seg" role="radiogroup" aria-label="撮影条件">
-        {(["dry", "wet"] as Condition[]).map((c) => (
-          <button key={c} className={condition === c ? "on" : ""} onClick={() => setCondition(c)} role="radio" aria-checked={condition === c}>
-            {CONDITION_LABEL[c]} <small>{count(c)}枚</small>
-          </button>
-        ))}
-      </div>
       <label className="check">
         <input type="checkbox" checked={hasCard} onChange={(e) => setHasCard(e.target.checked)} />
         基準カードあり
@@ -113,7 +103,6 @@ export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => voi
       <BulkImport
         stone={stone}
         files={importFiles}
-        condition={condition}
         hasCard={hasCard}
         settings={settings}
         onDone={() => {
@@ -129,7 +118,7 @@ export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => voi
       <div className="screen camera-screen">
         {settings}
         <Camera
-          hint={`${stone.id}（${stone.grade}等級）${CONDITION_LABEL[condition]}`}
+          hint={`${stone.id}（${stone.grade}等級）`}
           onCaptured={(c) => setPending(c)}
           onCancel={() => setMode("list")}
         />
@@ -146,34 +135,29 @@ export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => voi
       {(stone.source || stone.note) && <p className="meta">{[stone.source, stone.note].filter(Boolean).join(" / ")}</p>}
       {settings}
       <button className="primary wide" onClick={() => setMode("camera")}>
-        {CONDITION_LABEL[condition]}を撮影する
+        撮影する
       </button>
       <button className="wide import-button" onClick={() => importRef.current?.click()}>
         写真をまとめて取り込む
       </button>
       <input ref={importRef} type="file" accept="image/*" multiple hidden onChange={onImportFiles} />
-      {count("dry") > 0 && count("wet") === 0 && (
-        <p className="tip">乾燥写真のみです。同じ面を水で濡らした写真も撮ると、褐色化の比較ができます。</p>
-      )}
-      {(["dry", "wet"] as Condition[]).map((c) => (
-        <section key={c}>
-          <h3>{CONDITION_LABEL[c]}（{count(c)}枚）</h3>
-          <div className="grid">
-            {shots
-              .filter((s) => s.condition === c)
-              .map((s) => (
-                <figure key={s.id}>
-                  <img src={urls.get(s.id)} alt={s.face || CONDITION_LABEL[c]} loading="lazy" />
-                  <figcaption>
-                    {s.face}
-                    {judgeQuality(s.quality).some((w) => w.level === "bad") && <span className="flag">要確認</span>}
-                    <button className="x" onClick={() => remove(s.id)} aria-label="削除">削除</button>
-                  </figcaption>
-                </figure>
-              ))}
-          </div>
-        </section>
-      ))}
+      <section>
+        <h3>写真（{shots.length}枚）</h3>
+        <div className="grid">
+          {shots.map((s) => (
+            <figure key={s.id}>
+              <img src={urls.get(s.id)} alt={s.face || "写真"} loading="lazy" />
+              <figcaption>
+                {s.face}
+                {/* 湿潤の撮影は廃止したが、以前に撮った湿潤写真は見分けられるようにする */}
+                {s.condition === "wet" && <span className="wet-tag">{CONDITION_LABEL.wet}</span>}
+                {judgeQuality(s.quality).some((w) => w.level === "bad") && <span className="flag">要確認</span>}
+                <button className="x" onClick={() => remove(s.id)} aria-label="削除">削除</button>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
