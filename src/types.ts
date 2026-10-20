@@ -25,7 +25,7 @@ export interface Shot {
   id: string;
   stoneId: string;
   condition: Condition;
-  face: string; // 面・角度のメモ（例: A面, B面）
+  face: string; // 面のメモ（例: A面）。入力は廃止し新規は ""。旧データ互換のため残す
   hasReferenceCard: boolean;
   width: number;
   height: number;

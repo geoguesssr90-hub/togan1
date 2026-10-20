@@ -8,9 +8,8 @@ interface Props {
   stone: Stone;
   files: File[];
   condition: Condition;
-  face: string;
   hasCard: boolean;
-  settings: ReactNode; // 撮影条件・面・基準カードの入力欄（StoneDetail と共通）
+  settings: ReactNode; // 撮影条件・基準カードの入力欄（StoneDetail と共通）
   onDone: () => void;
 }
 
@@ -22,7 +21,7 @@ interface Warned {
 }
 
 /** 選んだ写真に同じ撮影設定を割り当て、1枚ずつ順番に画質チェックして保存する */
-export function BulkImport({ stone, files, condition, face, hasCard, settings, onDone }: Props) {
+export function BulkImport({ stone, files, condition, hasCard, settings, onDone }: Props) {
   const [phase, setPhase] = useState<"confirm" | "running" | "done">("confirm");
   const [processed, setProcessed] = useState(0);
   const [imported, setImported] = useState(0);
@@ -53,7 +52,7 @@ export function BulkImport({ stone, files, condition, face, hasCard, settings, o
           id: shotId,
           stoneId: stone.id,
           condition,
-          face,
+          face: "", // 面の入力は廃止。既存データとの互換のためフィールドは残す
           hasReferenceCard: hasCard,
           width: c.width,
           height: c.height,
@@ -91,12 +90,12 @@ export function BulkImport({ stone, files, condition, face, hasCard, settings, o
         <p className="meta">
           {stone.id} / {stone.grade}等級 / {files.length}枚を選択
         </p>
-        <p className="tip">選んだ写真すべてに、次の撮影条件・面・基準カードの有無を割り当てます。</p>
+        <p className="tip">選んだ写真すべてに、次の撮影条件・基準カードの有無を割り当てます。</p>
         {settings}
         <div className="row">
           <button className="ghost" onClick={onDone}>キャンセル</button>
           <button className="primary" onClick={run}>
-            {CONDITION_LABEL[condition]}・{face}として取り込む
+            {CONDITION_LABEL[condition]}として取り込む
           </button>
         </div>
       </div>

@@ -6,12 +6,9 @@ import { CONDITION_LABEL, type Condition, type Shot, type Stone } from "../types
 import { BulkImport } from "./BulkImport";
 import { Camera } from "./Camera";
 
-const FACES = ["A面", "B面", "C面", "D面", "側面", "その他"];
-
 export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => void }) {
   const [shots, setShots] = useState<Shot[]>([]);
   const [condition, setCondition] = useState<Condition>("dry");
-  const [face, setFace] = useState(FACES[0]);
   const [hasCard, setHasCard] = useState(true);
   const [mode, setMode] = useState<"list" | "camera">("list");
   const [pending, setPending] = useState<Captured | null>(null);
@@ -34,7 +31,7 @@ export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => voi
       id: newId(),
       stoneId: stone.id,
       condition,
-      face,
+      face: "", // 面の入力は廃止。既存データとの互換のためフィールドは残す
       hasReferenceCard: hasCard,
       width: pending.width,
       height: pending.height,
@@ -68,7 +65,7 @@ export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => voi
         <h2>確認</h2>
         <img className="review" src={pending.previewUrl} alt="撮影した写真" />
         <p className="meta">
-          {stone.id} / {stone.grade}等級 / {CONDITION_LABEL[condition]} / {face}
+          {stone.id} / {stone.grade}等級 / {CONDITION_LABEL[condition]}
         </p>
         {warnings.length === 0 ? (
           <p className="ok">画質チェック: 問題なし</p>
@@ -98,15 +95,10 @@ export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => voi
           </button>
         ))}
       </div>
-      <div className="row">
-        <select value={face} onChange={(e) => setFace(e.target.value)} aria-label="面">
-          {FACES.map((f) => <option key={f}>{f}</option>)}
-        </select>
-        <label className="check">
-          <input type="checkbox" checked={hasCard} onChange={(e) => setHasCard(e.target.checked)} />
-          基準カードあり
-        </label>
-      </div>
+      <label className="check">
+        <input type="checkbox" checked={hasCard} onChange={(e) => setHasCard(e.target.checked)} />
+        基準カードあり
+      </label>
     </div>
   );
 
@@ -122,7 +114,6 @@ export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => voi
         stone={stone}
         files={importFiles}
         condition={condition}
-        face={face}
         hasCard={hasCard}
         settings={settings}
         onDone={() => {
@@ -138,7 +129,7 @@ export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => voi
       <div className="screen camera-screen">
         {settings}
         <Camera
-          hint={`${stone.id}（${stone.grade}等級）${CONDITION_LABEL[condition]}・${face}`}
+          hint={`${stone.id}（${stone.grade}等級）${CONDITION_LABEL[condition]}`}
           onCaptured={(c) => setPending(c)}
           onCancel={() => setMode("list")}
         />
@@ -172,7 +163,7 @@ export function StoneDetail({ stone, onBack }: { stone: Stone; onBack: () => voi
               .filter((s) => s.condition === c)
               .map((s) => (
                 <figure key={s.id}>
-                  <img src={urls.get(s.id)} alt={`${s.face}`} loading="lazy" />
+                  <img src={urls.get(s.id)} alt={s.face || CONDITION_LABEL[c]} loading="lazy" />
                   <figcaption>
                     {s.face}
                     {judgeQuality(s.quality).some((w) => w.level === "bad") && <span className="flag">要確認</span>}
