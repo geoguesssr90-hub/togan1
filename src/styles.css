@@ -123,8 +123,22 @@ h3 { font-size: 14px; color: var(--muted); margin: 24px 0 8px; font-weight: 600;
 p.warnings { padding-left: 0; }
 
 .camera-screen { padding-top: 8px; }
-.camera .viewport { position: relative; background: #000; border-radius: var(--radius); overflow: hidden; aspect-ratio: 4 / 3; }
-.camera video { width: 100%; height: 100%; object-fit: cover; display: block; }
+/*
+ * 表示枠はカメラ映像そのものの縦横比（--ar = 幅÷高さ、Camera.tsx が設定）にし、映像を切り落とさずに全体を見せる。
+ * 見えている範囲と撮影・判定される範囲が一致し、撮影ガイド（映像に対する割合で配置）も判定範囲と一致する。
+ * 縦長の映像でも画面からはみ出さないよう、高さは画面の60%まで。そのときは幅を縮めて中央に置く。
+ */
+.camera .viewport {
+  position: relative;
+  background: #000;
+  border-radius: var(--radius);
+  overflow: hidden;
+  aspect-ratio: var(--ar, 1.3333);
+  width: min(100%, calc(60vh * var(--ar, 1.3333)));
+  width: min(100%, calc(60dvh * var(--ar, 1.3333)));
+  margin: 0 auto;
+}
+.camera video { width: 100%; height: 100%; object-fit: contain; display: block; }
 .guide { position: absolute; inset: 0; pointer-events: none; }
 .guide-stone { position: absolute; left: 12%; top: 14%; width: 52%; height: 72%; border: 2px dashed rgba(255,255,255,0.75); border-radius: 18px; color: rgba(255,255,255,0.75); font-size: 12px; padding: 6px 10px; }
 .guide-card { position: absolute; right: 6%; top: 30%; width: 22%; height: 40%; border: 2px dashed rgba(255,214,102,0.85); border-radius: 6px; color: rgba(255,214,102,0.9); font-size: 11px; padding: 4px 6px; }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { captureFrom, captureFromFile, type Captured } from "../capture";
 
 interface Props {
@@ -15,6 +15,9 @@ export function Camera({ onCaptured, onCancel, hint, showGuide = true, cardGuide
   const fileRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // 映像の幅÷高さ。表示枠をこの比にして映像を切り落とさずに全体を見せる（見えている範囲＝撮影・判定される範囲）。
+  // 映像が届くまでは 4:3。スマホを回すと映像の縦横が変わるので、そのたびに読み直す
+  const [aspect, setAspect] = useState(4 / 3);
 
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -38,6 +41,20 @@ export function Camera({ onCaptured, onCancel, hint, showGuide = true, cardGuide
       stream?.getTracks().forEach((t) => t.stop());
     };
   }, []);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const read = () => {
+      if (v.videoWidth && v.videoHeight) setAspect(v.videoWidth / v.videoHeight);
+    };
+    v.addEventListener("loadedmetadata", read);
+    v.addEventListener("resize", read);
+    return () => {
+      v.removeEventListener("loadedmetadata", read);
+      v.removeEventListener("resize", read);
+    };
+  }, [error]);
 
   async function shoot() {
     const v = videoRef.current;
@@ -64,7 +81,7 @@ export function Camera({ onCaptured, onCancel, hint, showGuide = true, cardGuide
 
   return (
     <div className="camera">
-      <div className="viewport">
+      <div className="viewport" style={{ "--ar": aspect } as CSSProperties}>
         {!error && <video ref={videoRef} playsInline muted />}
         {showGuide && (
           <div className="guide" aria-hidden>
