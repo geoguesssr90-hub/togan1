@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { analyzeBlob, describeModel, loadModel, type Analysis, type ModelSource } from "../analyze";
+import { analyzeBlob, loadModel, type Analysis } from "../analyze";
 import type { Captured } from "../capture";
 import { predict, type Model } from "../model";
 import { BatchJudge } from "./BatchJudge";
@@ -23,7 +23,7 @@ const SHOOTING_TIPS = [
 const MODE_LABEL: Record<Mode, string> = { single: "1個ずつ", batch: "まとめて" };
 
 export function Judge({ onBack }: { onBack: () => void }) {
-  const [loaded, setLoaded] = useState<{ model: Model; source: ModelSource } | null | undefined>(undefined);
+  const [loaded, setLoaded] = useState<{ model: Model } | null | undefined>(undefined);
   const [mode, setMode] = useState<Mode>("single");
 
   useEffect(() => {
@@ -42,8 +42,7 @@ export function Judge({ onBack }: { onBack: () => void }) {
     );
   }
 
-  const { model, source } = loaded;
-  const modelInfo = <p className="meta judge-model">使用モデル: {describeModel(model, source)}</p>;
+  const { model } = loaded;
   // 切り替えは各モードの最初の撮影画面にだけ出す（途中で切り替えて撮影済みの写真を失わないように）
   const modeSwitch = (
     <>
@@ -57,14 +56,13 @@ export function Judge({ onBack }: { onBack: () => void }) {
           </button>
         ))}
       </div>
-      {modelInfo}
     </>
   );
 
   return mode === "single" ? (
-    <SingleJudge model={model} onBack={onBack} modeSwitch={modeSwitch} modelInfo={modelInfo} />
+    <SingleJudge model={model} onBack={onBack} modeSwitch={modeSwitch} />
   ) : (
-    <BatchJudge model={model} onBack={onBack} modeSwitch={modeSwitch} modelInfo={modelInfo} />
+    <BatchJudge model={model} onBack={onBack} modeSwitch={modeSwitch} />
   );
 }
 
@@ -72,11 +70,10 @@ interface ModeProps {
   model: Model;
   onBack: () => void;
   modeSwitch: ReactNode;
-  modelInfo: ReactNode; // どちらのモデルで判定したか（結果画面に出す）
 }
 
 /** 1個ずつ: 乾燥写真を1枚撮る → 結果 */
-function SingleJudge({ model, onBack, modeSwitch, modelInfo }: ModeProps) {
+function SingleJudge({ model, onBack, modeSwitch }: ModeProps) {
   const [step, setStep] = useState<Step>("capture");
   const [shot, setShot] = useState<Shot | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -116,7 +113,7 @@ function SingleJudge({ model, onBack, modeSwitch, modelInfo }: ModeProps) {
           <span>2 結果</span>
         </div>
         {error && <p className="warnings bad">{error}</p>}
-        <Camera hint="乾いた状態の石を撮影してください" onCaptured={onCaptured} onCancel={onBack} />
+        <Camera hint="乾いた状態の石を撮影してください" cardGuide={false} onCaptured={onCaptured} onCancel={onBack} />
       </div>
     );
   }
@@ -178,7 +175,6 @@ function SingleJudge({ model, onBack, modeSwitch, modelInfo }: ModeProps) {
         色の付いた部分だけを使って判定しています。影や背景に色が付いている場合は、撮り方を見直してください。
       </p>
 
-      {modelInfo}
 
       <div className="judge-end">
         <button className="primary wide" onClick={restart}>もう一度試す</button>

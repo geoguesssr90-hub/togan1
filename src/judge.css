@@ -62,7 +62,6 @@
 .batch-figure canvas { width: 100%; height: auto; display: block; border-radius: var(--radius); background: #000; }
 .batch-figure figcaption { font-size: 12px; color: var(--muted); text-align: center; margin-top: 4px; }
 .batch-table td.overall { font-weight: 600; }
-.judge-model { margin: 6px 0 10px; }
 
 /* 判定の撮り方の案内と、結果画面の最後のボタン */
 .judge-guide {

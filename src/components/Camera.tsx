@@ -6,10 +6,11 @@ interface Props {
   onCancel: () => void;
   hint: string;
   showGuide?: boolean; // 1個判定用の「石」「基準カード」枠。まとめて撮るときは消す
+  cardGuide?: boolean; // 「基準カード」の枠。判定では使わないので消し、「石」の枠を中央に置く
 }
 
 /** 背面カメラのライブ映像＋撮影ガイド。カメラが使えなければファイル選択にフォールバック */
-export function Camera({ onCaptured, onCancel, hint, showGuide = true }: Props) {
+export function Camera({ onCaptured, onCancel, hint, showGuide = true, cardGuide = true }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -67,8 +68,8 @@ export function Camera({ onCaptured, onCancel, hint, showGuide = true }: Props) 
         {!error && <video ref={videoRef} playsInline muted />}
         {showGuide && (
           <div className="guide" aria-hidden>
-            <div className="guide-stone">石</div>
-            <div className="guide-card">基準カード</div>
+            <div className={"guide-stone" + (cardGuide ? "" : " centered")}>石</div>
+            {cardGuide && <div className="guide-card">基準カード</div>}
           </div>
         )}
         {error && <p className="camera-error">{error}</p>}

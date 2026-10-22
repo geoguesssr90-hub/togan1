@@ -30,11 +30,10 @@ interface Props {
   model: Model;
   onBack: () => void;
   modeSwitch: ReactNode;
-  modelInfo: ReactNode; // どちらのモデルで判定したか（結果画面に出す）
 }
 
 /** まとめて判定: 暗い背景に並べた複数の石を1枚で撮り、1個ずつ切り出して判定する */
-export function BatchJudge({ model, onBack, modeSwitch, modelInfo }: Props) {
+export function BatchJudge({ model, onBack, modeSwitch }: Props) {
   const [step, setStep] = useState<Step>("front");
   const [front, setFront] = useState<Captured | null>(null);
   const [result, setResult] = useState<Result | null>(null);
@@ -74,7 +73,7 @@ export function BatchJudge({ model, onBack, modeSwitch, modelInfo }: Props) {
 
   if (step === "analyzing") return <div className="screen"><p className="meta">石を切り出して判定中…</p></div>;
 
-  if (step === "result" && result) return <BatchResult result={result} modelInfo={modelInfo} onBack={onBack} onRestart={restart} />;
+  if (step === "result" && result) return <BatchResult result={result} onBack={onBack} onRestart={restart} />;
 
   const key = step as PhotoKey;
   const isFront = key === "front";
@@ -133,12 +132,10 @@ function fmt(j: StoneJudgement | null) {
 
 function BatchResult({
   result,
-  modelInfo,
   onBack,
   onRestart,
 }: {
   result: Result;
-  modelInfo: ReactNode;
   onBack: () => void;
   onRestart: () => void;
 }) {
@@ -194,7 +191,6 @@ function BatchResult({
       <p className="tip">
         総合は表と裏のうち悪い方の等級です。番号は写真の上の行から、各行を左から右の順です。
       </p>
-      {modelInfo}
 
       <div className="judge-end">
         <button className="primary wide" onClick={onRestart}>もう一度試す</button>
