@@ -6,10 +6,12 @@ import { GRADES, type Grade, type Shot, type Stone } from "../types";
 import { ModelPanel } from "./ModelPanel";
 
 export function Home({
+  onStart,
   onOpen,
   onJudge,
   onSplitImport,
 }: {
+  onStart: () => void;
   onOpen: (s: Stone) => void;
   onJudge: () => void;
   onSplitImport: () => void;
@@ -132,6 +134,7 @@ export function Home({
 
   return (
     <div className={"screen" + (selecting ? " selecting" : "")}>
+      <button className="back" onClick={onStart}>← 最初の画面</button>
       <header className="top">
         <h1>陶眼 <span>データ収集</span></h1>
         <p className="meta">{storage}</p>

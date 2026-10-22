@@ -153,3 +153,16 @@ button.small { min-height: 36px; padding: 6px 12px; font-size: 13px; }
 .select-bar button { display: block; width: 100%; max-width: 608px; margin: 0 auto; }
 button.link-danger { display: block; margin: 32px auto 0; border: none; background: none; min-height: 0; padding: 8px; color: var(--muted); font-size: 12px; text-decoration: underline; }
 .wipe-confirm { display: grid; gap: 4px; margin: 16px 0 12px; font-size: 13px; color: var(--muted); }
+
+/* 最初の画面 */
+.start { display: flex; flex-direction: column; min-height: 100dvh; }
+.start-head { margin: 40px 0 28px; }
+.start-head h1 { font-size: 40px; margin: 0; letter-spacing: 0.08em; }
+.start-head p { margin: 6px 0 0; color: var(--muted); font-size: 15px; }
+.start-choices { display: grid; gap: 14px; }
+.start-choice { display: grid; gap: 6px; text-align: left; padding: 20px 18px; min-height: 104px; border-radius: 14px; border: 2px solid var(--accent); background: transparent; color: var(--ink); }
+.start-choice strong { font-size: 22px; }
+.start-choice span { font-size: 14px; color: var(--muted); }
+.start-choice.primary { background: var(--accent); color: var(--accent-ink); }
+.start-choice.primary span { color: var(--accent-ink); opacity: 0.85; }
+.start-note { margin-top: auto; padding-top: 24px; text-align: center; font-size: 12px; color: var(--muted); }

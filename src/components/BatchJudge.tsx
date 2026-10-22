@@ -146,7 +146,7 @@ function BatchResult({
 
   return (
     <div className="screen">
-      <button className="back" onClick={onBack}>← 一覧</button>
+      <button className="back" onClick={onBack}>← 最初の画面</button>
       <p className="meta">まとめて判定（試作モデル）</p>
 
       {warnings.length > 0 && (
@@ -196,7 +196,10 @@ function BatchResult({
       </p>
       {modelInfo}
 
-      <button className="primary wide" onClick={onRestart}>別の石を判定する</button>
+      <div className="judge-end">
+        <button className="primary wide" onClick={onRestart}>もう一度試す</button>
+        <button className="ghost wide" onClick={onBack}>最初の画面に戻る</button>
+      </div>
     </div>
   );
 }

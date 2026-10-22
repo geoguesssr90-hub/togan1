@@ -38,7 +38,8 @@
 - `src/analyze.ts` ブラウザ側の画像解析、学習データの収集、モデルの保存・読み込み
 - `src/split.ts` 写真を撮影順に並べて「石1個につきN枚」ずつ新しい石IDへ振り分ける。確認画面での手直し（行への移動・新しい行・除外・前後へずらす）も含む（純粋関数）
 - `src/selection.ts` まとめて削除の選択操作（等級ごとの選択、削除件数の集計、「すべて削除」の確認文字列）
-- `src/components/` Home（一覧・集計・書き出し）/ StoneDetail（撮影設定・ギャラリー）/ Camera / BulkImport（写真のまとめて取り込み。取り込み処理本体は ImportRunner）/ SplitImport・SplitStone・SplitPreview（N枚ずつ別の石に振り分け）/ ModelPanel（学習）/ Judge・BatchJudge（判定）
+- `src/route.ts` 画面とURLハッシュの対応（なし=最初の画面、#judge=判定、#train=学習）
+- `src/components/` Start（最初の画面: 判定する／学習する）/ Home（学習: 一覧・集計・書き出し）/ StoneDetail（撮影設定・ギャラリー）/ Camera / BulkImport（写真のまとめて取り込み。取り込み処理本体は ImportRunner）/ SplitImport・SplitStone・SplitPreview（N枚ずつ別の石に振り分け）/ ModelPanel（学習）/ Judge・BatchJudge（判定）
 
 ## 約束事
 - UI文言は日本語。絵文字は使わない

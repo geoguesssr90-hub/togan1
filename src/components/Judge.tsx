@@ -13,6 +13,13 @@ interface Shot {
 }
 
 type Mode = "single" | "batch";
+
+/** 判定する前に見せる撮り方の案内（初めて使う人向け） */
+const SHOOTING_TIPS = [
+  "黒い台紙ごと、画面いっぱいに写してください",
+  "石を画面の中央に置いてください",
+  "影が濃く出ない向きで撮ってください",
+];
 const MODE_LABEL: Record<Mode, string> = { single: "1個ずつ", batch: "まとめて" };
 
 export function Judge({ onBack }: { onBack: () => void }) {
@@ -28,7 +35,7 @@ export function Judge({ onBack }: { onBack: () => void }) {
   if (loaded === null) {
     return (
       <div className="screen">
-        <button className="back" onClick={onBack}>← 一覧</button>
+        <button className="back" onClick={onBack}>← 最初の画面</button>
         <h2>判定</h2>
         <p>まだ判定用のモデルがありません。一覧画面の「モデルを学習する」を先に実行してください。</p>
       </div>
@@ -40,6 +47,9 @@ export function Judge({ onBack }: { onBack: () => void }) {
   // 切り替えは各モードの最初の撮影画面にだけ出す（途中で切り替えて撮影済みの写真を失わないように）
   const modeSwitch = (
     <>
+      <ul className="judge-guide" aria-label="撮り方">
+        {SHOOTING_TIPS.map((t) => <li key={t}>{t}</li>)}
+      </ul>
       <div className="seg judge-mode" role="radiogroup" aria-label="判定のしかた">
         {(["single", "batch"] as Mode[]).map((m) => (
           <button key={m} className={mode === m ? "on" : ""} onClick={() => setMode(m)} role="radio" aria-checked={mode === m}>
@@ -130,7 +140,7 @@ function SingleJudge({ model, onBack, modeSwitch, modelInfo }: ModeProps) {
 
   return (
     <div className="screen">
-      <button className="back" onClick={onBack}>← 一覧</button>
+      <button className="back" onClick={onBack}>← 最初の画面</button>
       <p className="meta">判定結果（試作モデル）</p>
       <h2 className="judge-top">
         {top.grade}<span>等級</span>
@@ -165,7 +175,10 @@ function SingleJudge({ model, onBack, modeSwitch, modelInfo }: ModeProps) {
 
       {modelInfo}
 
-      <button className="primary wide" onClick={restart}>別の石を判定する</button>
+      <div className="judge-end">
+        <button className="primary wide" onClick={restart}>もう一度試す</button>
+        <button className="ghost wide" onClick={onBack}>最初の画面に戻る</button>
+      </div>
     </div>
   );
 }
