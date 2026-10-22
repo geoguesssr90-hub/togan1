@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { analyzeBatchBlob, type BatchAnalysis } from "../analyze";
 import { judgeStones, pairSides, type PairedRow, type StoneJudgement } from "../batch";
 import type { Captured } from "../capture";
+import { confidenceLabel } from "../confidence";
 import type { Box } from "../features";
 import type { Model } from "../model";
 import { Camera } from "./Camera";
@@ -127,7 +128,7 @@ function buildResult(model: Model, f: Captured, fa: BatchAnalysis, b: Captured |
 }
 
 function fmt(j: StoneJudgement | null) {
-  return j ? `${j.grade}等級（${Math.round(j.prob * 100)}%）` : "—";
+  return j ? `${j.grade}等級（${confidenceLabel(j.prob)}）` : "—";
 }
 
 function BatchResult({
@@ -157,7 +158,7 @@ function BatchResult({
       {rows ? (
         rows.length > 0 && (
           <table className="summary batch-table">
-            <thead><tr><th>番号</th><th>表</th><th>裏</th><th>総合</th></tr></thead>
+            <thead><tr><th>番号</th><th>表（確信度）</th><th>裏（確信度）</th><th>総合</th></tr></thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.index}>
@@ -178,7 +179,7 @@ function BatchResult({
               <section key={s.name}>
                 <h3>{s.name}</h3>
                 <table className="summary batch-table">
-                  <thead><tr><th>番号</th><th>等級（確率）</th></tr></thead>
+                  <thead><tr><th>番号</th><th>等級（確信度）</th></tr></thead>
                   <tbody>
                     {s.judged.map((j) => <tr key={j.index}><td>{j.index}</td><td>{fmt(j)}</td></tr>)}
                   </tbody>

@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { analyzeBlob, loadModel, type Analysis } from "../analyze";
 import type { Captured } from "../capture";
+import { confidenceLabel } from "../confidence";
 import { predict, type Model } from "../model";
 import { BatchJudge } from "./BatchJudge";
 import { Camera } from "./Camera";
@@ -145,7 +146,7 @@ function SingleJudge({ model, onBack, modeSwitch }: ModeProps) {
           <span className="seal-unit">等級</span>
         </h2>
         <div className="judge-result-side">
-          <span className="judge-prob">{Math.round(top.prob * 100)}%</span>
+          <span className="judge-prob">確信度 {confidenceLabel(top.prob)}</span>
         </div>
       </div>
 
@@ -154,7 +155,6 @@ function SingleJudge({ model, onBack, modeSwitch }: ModeProps) {
           <div key={p.grade} className={"prob" + (p === top ? " top" : "")}>
             <span className="prob-label">{p.grade}等級</span>
             <span className="prob-bar"><span style={{ width: `${Math.max(1, p.prob * 100)}%` }} /></span>
-            <span className="prob-val">{Math.round(p.prob * 100)}%</span>
           </div>
         ))}
       </div>
