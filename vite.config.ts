@@ -11,8 +11,8 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeManifestIcons: false, // アイコンは下の globPatterns で拾う（二重登録を避ける）
       manifest: {
-        name: "陶眼 データ収集",
-        short_name: "陶眼収集",
+        name: "陶眼",
+        short_name: "陶眼",
         start_url: "/",
         display: "standalone",
         background_color: "#f4f1ea",
