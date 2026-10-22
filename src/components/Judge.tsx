@@ -17,7 +17,7 @@ type Mode = "single" | "batch";
 /** 判定する前に見せる撮り方の案内（初めて使う人向け） */
 const SHOOTING_TIPS = [
   "黒い台紙ごと、画面いっぱいに写してください",
-  "石を画面の中央に置いてください",
+  "石を点線の枠の中に入れてください",
   "影が濃く出ない向きで撮ってください",
 ];
 const MODE_LABEL: Record<Mode, string> = { single: "1個ずつ", batch: "まとめて" };
