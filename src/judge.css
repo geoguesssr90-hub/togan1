@@ -1,39 +1,79 @@
 /* 判定・学習まわりのスタイル（styles.css の変数を使う） */
-.model-panel { padding: 14px; margin: 16px 0 4px; }
+.model-panel { padding: 16px; margin: 20px 0 4px; }
 .model-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 10px; }
-.model-head h3 { margin: 0; color: var(--ink); font-size: 16px; }
+.model-head h3 { margin: 0; color: var(--ink); font-size: 15px; }
 .model-sub { justify-content: flex-end; margin-top: 6px; }
 .model-sub > * { flex: 0 0 auto; }
 
 .judge-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; font-size: 13px; text-align: center; }
-.judge-steps span { padding: 6px 0; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); }
+.judge-steps span { padding: 6px 0; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--line); color: var(--muted); }
 .judge-steps .on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .judge-steps .done { color: var(--ink); }
 
-.judge-top { font-size: 56px; line-height: 1.1; margin: 4px 0 12px; font-variant-numeric: tabular-nums; }
-.judge-top span { font-size: 22px; margin-left: 4px; }
-.judge-top small { font-size: 18px; color: var(--muted); font-weight: 500; margin-left: 12px; }
+/* 判定結果: 朱の枠の正方形に、明朝の数字と「等級」を縦に並べる（落款のような印） */
+.judge-result { display: flex; align-items: center; gap: 20px; margin: 16px 0 20px; }
+.seal {
+  flex: none;
+  margin: 0;
+  width: 112px;
+  height: 112px;
+  border: 2px solid var(--seal);
+  border-radius: 4px;
+  color: var(--seal);
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  font-family: var(--serif);
+  line-height: 1;
+}
+.seal-num { font-size: 60px; font-weight: 600; }
+.seal-unit { font-size: 16px; letter-spacing: 0.3em; text-indent: 0.3em; margin-top: 8px; }
+.judge-result-side { display: grid; gap: 2px; min-width: 0; }
+.judge-prob { font-size: 22px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
-.probs { display: grid; gap: 6px; margin-bottom: 8px; }
-.prob { display: grid; grid-template-columns: 64px 1fr 44px; align-items: center; gap: 8px; font-size: 14px; font-variant-numeric: tabular-nums; }
-.prob-bar { height: 10px; border-radius: 99px; background: var(--line); overflow: hidden; }
-.prob-bar span { display: block; height: 100%; background: var(--muted); border-radius: 99px; }
+/* 表の中の小さな等級の印（まとめて判定の総合） */
+.seal-inline {
+  display: inline-block;
+  border: 1.5px solid var(--seal);
+  border-radius: 3px;
+  color: var(--seal);
+  font-family: var(--serif);
+  font-weight: 600;
+  padding: 0 6px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+/* 確率バー: 細く、1位だけ藍 */
+.probs { display: grid; gap: 8px; margin-bottom: 12px; }
+.prob { display: grid; grid-template-columns: 56px 1fr 44px; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.prob-bar { height: 6px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.prob-bar span { display: block; height: 100%; background: var(--line-strong); border-radius: 99px; }
+.prob.top { color: var(--ink); font-weight: 600; }
 .prob.top .prob-bar span { background: var(--accent); }
-.prob.top { font-weight: 600; }
 .prob-val { text-align: right; }
 
-
-.mask-one { width: 100%; border-radius: 8px; display: block; }
+.mask-one { width: 100%; border-radius: var(--radius); display: block; }
 
 /* まとめて判定 */
 .judge-mode { margin-bottom: 10px; }
 .skip-back { margin-top: 10px; }
 .batch-figure { margin: 12px 0; }
-.batch-figure canvas { width: 100%; height: auto; display: block; border-radius: 8px; background: #000; }
-.batch-figure figcaption { font-size: 12px; color: var(--muted); text-align: center; margin-top: 2px; }
+.batch-figure canvas { width: 100%; height: auto; display: block; border-radius: var(--radius); background: #000; }
+.batch-figure figcaption { font-size: 12px; color: var(--muted); text-align: center; margin-top: 4px; }
 .batch-table td.overall { font-weight: 600; }
 .judge-model { margin: 6px 0 10px; }
 
 /* 判定の撮り方の案内と、結果画面の最後のボタン */
-.judge-guide { margin: 0 0 10px; padding-left: 20px; font-size: 13px; line-height: 1.6; color: var(--ink); }
-.judge-end button.wide { margin: 6px 0; }
+.judge-guide {
+  margin: 0 0 12px;
+  padding: 12px 14px 12px 32px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.judge-end { margin-top: 20px; }
+.judge-end button.wide { margin: 8px 0; }

@@ -142,10 +142,15 @@ function SingleJudge({ model, onBack, modeSwitch, modelInfo }: ModeProps) {
     <div className="screen">
       <button className="back" onClick={onBack}>← 最初の画面</button>
       <p className="meta">判定結果（試作モデル）</p>
-      <h2 className="judge-top">
-        {top.grade}<span>等級</span>
-        <small>{Math.round(top.prob * 100)}%</small>
-      </h2>
+      <div className="judge-result">
+        <h2 className="seal" aria-label={`${top.grade}等級`}>
+          <span className="seal-num">{top.grade}</span>
+          <span className="seal-unit">等級</span>
+        </h2>
+        <div className="judge-result-side">
+          <span className="judge-prob">{Math.round(top.prob * 100)}%</span>
+        </div>
+      </div>
 
       <div className="probs">
         {probs.map((p) => (

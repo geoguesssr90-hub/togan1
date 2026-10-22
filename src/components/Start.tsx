@@ -18,7 +18,11 @@ export function Start({ onJudge, onTrain }: { onJudge: () => void; onTrain: () =
         </button>
       </div>
 
-      <p className="start-note">写真はこの端末の中だけで処理され、どこにも送信されません</p>
+      {/* 狭い画面では「、」の後で折り返す（語の途中で1〜2文字だけ次の行に残らないように） */}
+      <p className="start-note">
+        <span>写真はこの端末の中だけで処理され、</span>
+        <span>どこにも送信されません</span>
+      </p>
     </div>
   );
 }

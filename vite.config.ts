@@ -15,8 +15,8 @@ export default defineConfig({
         short_name: "陶眼",
         start_url: "/",
         display: "standalone",
-        background_color: "#f4f1ea",
-        theme_color: "#1f2a2e",
+        background_color: "#f7f8f6",
+        theme_color: "#f7f8f6",
         lang: "ja",
         icons: [
           { src: "/icon-192.png", sizes: "192x192", type: "image/png" },

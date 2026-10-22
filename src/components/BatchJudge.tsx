@@ -167,7 +167,7 @@ function BatchResult({
                   <td>{r.index}</td>
                   <td>{fmt(r.front)}</td>
                   <td>{fmt(r.back)}</td>
-                  <td className="overall">{r.overall}等級</td>
+                  <td className="overall"><span className="seal-inline">{r.overall}等級</span></td>
                 </tr>
               ))}
             </tbody>
@@ -231,7 +231,7 @@ function SideOverlay({ side }: { side: Side }) {
       ctx.textBaseline = "top";
       ctx.lineWidth = Math.max(2, fs / 8);
       for (const m of marks) {
-        const color = m.warn ? "#f2a33a" : "#2fa0aa";
+        const color = m.warn ? "#9a6a00" : "#1f3a6b"; // くっつきの可能性は警告の色、それ以外は藍
         ctx.strokeStyle = color;
         ctx.strokeRect(m.box.x0, m.box.y0, m.box.x1 - m.box.x0, m.box.y1 - m.box.y0);
         const tw = ctx.measureText(m.text).width + fs * 0.6;
