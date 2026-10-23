@@ -52,7 +52,44 @@
 .prob.top { color: var(--ink); font-weight: 600; }
 .prob.top .prob-bar span { background: var(--accent); }
 
-.mask-one { width: 100%; border-radius: var(--radius); display: block; }
+/*
+ * 石として認識した範囲の画像。縦横比を保ち、切り取らずに全体を見せる。
+ * スマホでは幅いっぱいにしつつ、高さは画面の45%まで（余りは左右の余白になる）
+ */
+.mask-one {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 45vh;
+  max-height: 45dvh;
+  object-fit: contain;
+  border-radius: var(--radius);
+}
+
+/* 1個判定の結果の並び。スマホ（900px未満）: 印 → 画像 → 確率バー → 根拠の表 */
+.judge-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "seal" "view" "probs" "basis";
+}
+.jl-seal { grid-area: seal; }
+.jl-view { grid-area: view; min-width: 0; }
+.jl-probs { grid-area: probs; margin-top: 16px; }
+.jl-basis { grid-area: basis; }
+
+/* パソコン（900px以上）: 左の列に印・確率バー・根拠の表、右の列に画像と注記 */
+@media (min-width: 900px) {
+  .screen.judge-result-screen { max-width: 1040px; }
+  .judge-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas: "seal view" "probs view" "basis view";
+    column-gap: 40px;
+  }
+  .jl-probs { margin-top: 0; }
+  .jl-view h3 { margin-top: 16px; }
+  .jl-view .mask-one { max-height: none; }
+}
 
 /* まとめて判定 */
 .judge-mode { margin-bottom: 10px; }

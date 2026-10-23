@@ -34,6 +34,7 @@
 - `src/exportZip.ts` 学習用ZIP: `images/grade_{等級}/{石ID}/{dry|wet}_{連番}.jpg` + `metadata.csv` + `stones.csv`
 - `src/features.ts` 特徴量の抽出（1個判定の `extractFeatures`、まとめて判定の切り出し `segmentStones`）
 - `src/model.ts` ロジスティック回帰の学習・予測
+- `src/recognition.ts` 1個判定で石を認識できたかの確認（ROIの2%未満、またはROI外周の25%以上が石なら等級を出さない）
 - `src/batch.ts` まとめて判定の石ごとの判定、表と裏の対応付け、`worseGrade`
 - `src/analyze.ts` ブラウザ側の画像解析、学習データの収集、モデルの保存・読み込み
 - `src/split.ts` 写真を撮影順に並べて「石1個につきN枚」ずつ新しい石IDへ振り分ける。確認画面での手直し（行への移動・新しい行・除外・前後へずらす）も含む（純粋関数）

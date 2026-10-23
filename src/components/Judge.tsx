@@ -123,7 +123,30 @@ function SingleJudge({ model, onBack, modeSwitch }: ModeProps) {
     return <div className="screen"><p className="meta">解析中…</p></div>;
   }
 
-  const f = shot.analysis.features;
+  const { features: f, maskPreview, recognition } = shot.analysis;
+  const maskFigure = (
+    <>
+      <h3>石として認識した範囲</h3>
+      <img className="mask-one" src={maskPreview} alt="石として認識した範囲" />
+    </>
+  );
+
+  // 石を認識できなかったときは、誤った等級を見せないよう等級・確率・根拠を出さない
+  if (!recognition.ok) {
+    return (
+      <div className="screen">
+        <button className="back" onClick={onBack}>← 最初の画面</button>
+        <p className="warnings bad">
+          石を認識できませんでした。黒い台紙の上に石を置いて、点線の枠の中に入れて撮り直してください
+        </p>
+        {maskFigure}
+        <div className="judge-end">
+          <button className="primary wide" onClick={restart}>撮り直す</button>
+        </div>
+      </div>
+    );
+  }
+
   const lowArea = f.areaRatio < 0.03;
   const probs = predict(model, f);
   const top = probs.reduce((p, q) => (q.prob > p.prob ? q : p));
@@ -136,45 +159,51 @@ function SingleJudge({ model, onBack, modeSwitch }: ModeProps) {
     ["暗い斑点の割合", pct(f.spotRatio)],
   ];
 
+  // 並び順はCSSのグリッドで決める: スマホは 印→画像→確率→根拠、パソコンは左に印・確率・根拠、右に画像
   return (
-    <div className="screen">
+    <div className="screen judge-result-screen">
       <button className="back" onClick={onBack}>← 最初の画面</button>
       <p className="meta">判定結果（試作モデル）</p>
-      <div className="judge-result">
-        <h2 className="seal" aria-label={`${top.grade}等級`}>
-          <span className="seal-num">{top.grade}</span>
-          <span className="seal-unit">等級</span>
-        </h2>
-        <div className="judge-result-side">
-          <span className="judge-prob">確信度 {confidenceLabel(top.prob)}</span>
+      <div className="judge-layout">
+        <div className="judge-result jl-seal">
+          <h2 className="seal" aria-label={`${top.grade}等級`}>
+            <span className="seal-num">{top.grade}</span>
+            <span className="seal-unit">等級</span>
+          </h2>
+          <div className="judge-result-side">
+            <span className="judge-prob">確信度 {confidenceLabel(top.prob)}</span>
+          </div>
+        </div>
+
+        <div className="jl-probs">
+          <div className="probs">
+            {probs.map((p) => (
+              <div key={p.grade} className={"prob" + (p === top ? " top" : "")}>
+                <span className="prob-label">{p.grade}等級</span>
+                <span className="prob-bar"><span style={{ width: `${Math.max(1, p.prob * 100)}%` }} /></span>
+              </div>
+            ))}
+          </div>
+          {lowArea && <p className="warnings warn">石を十分に検出できていません。石を画面の枠いっぱいに写してください。</p>}
+        </div>
+
+        <div className="jl-basis">
+          <h3>判定の根拠</h3>
+          <table className="summary">
+            <thead><tr><th>項目</th><th>値</th></tr></thead>
+            <tbody>
+              {rows.map(([k, v]) => <tr key={k}><td>{k}</td><td>{v}</td></tr>)}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="jl-view">
+          {maskFigure}
+          <p className="tip">
+            色の付いた部分だけを使って判定しています。影や背景に色が付いている場合は、撮り方を見直してください。
+          </p>
         </div>
       </div>
-
-      <div className="probs">
-        {probs.map((p) => (
-          <div key={p.grade} className={"prob" + (p === top ? " top" : "")}>
-            <span className="prob-label">{p.grade}等級</span>
-            <span className="prob-bar"><span style={{ width: `${Math.max(1, p.prob * 100)}%` }} /></span>
-          </div>
-        ))}
-      </div>
-
-      {lowArea && <p className="warnings warn">石を十分に検出できていません。石を画面の枠いっぱいに写してください。</p>}
-
-      <h3>判定の根拠</h3>
-      <table className="summary">
-        <thead><tr><th>項目</th><th>値</th></tr></thead>
-        <tbody>
-          {rows.map(([k, v]) => <tr key={k}><td>{k}</td><td>{v}</td></tr>)}
-        </tbody>
-      </table>
-
-      <h3>石として認識した範囲</h3>
-      <img className="mask-one" src={shot.analysis.maskPreview} alt="石として認識した範囲" />
-      <p className="tip">
-        色の付いた部分だけを使って判定しています。影や背景に色が付いている場合は、撮り方を見直してください。
-      </p>
-
 
       <div className="judge-end">
         <button className="primary wide" onClick={restart}>もう一度試す</button>
