@@ -2,14 +2,12 @@
 import { extractFeatures, segmentStones, type SegmentedStone, type StoneFeatures } from "./features";
 import { listShots, listStones } from "./db";
 import { isModel, type Model, type StoneSamples } from "./model";
-import { checkRecognition, type Recognition } from "./recognition";
 
 const ANALYSIS_LONG_SIDE = 400;
 
 export interface Analysis {
   features: StoneFeatures;
   maskPreview?: string; // 石と認識した範囲を色付けした画像（確認用）
-  recognition: Recognition; // 石を正しく認識できたか（できなければ1個判定で等級を出さない）
 }
 
 export async function analyzeBlob(blob: Blob, withPreview = false): Promise<Analysis> {
@@ -25,8 +23,7 @@ export async function analyzeBlob(blob: Blob, withPreview = false): Promise<Anal
     ctx.drawImage(bmp, 0, 0, w, h);
     const img = ctx.getImageData(0, 0, w, h);
     const { features, mask } = extractFeatures(img.data, w, h);
-    const recognition = checkRecognition(mask, w, h, features.areaRatio);
-    if (!withPreview) return { features, recognition };
+    if (!withPreview) return { features };
     const d = img.data;
     for (let i = 0; i < mask.length; i++) {
       if (mask[i]) {
@@ -40,7 +37,7 @@ export async function analyzeBlob(blob: Blob, withPreview = false): Promise<Anal
       }
     }
     ctx.putImageData(img, 0, 0);
-    return { features, recognition, maskPreview: c.toDataURL("image/jpeg", 0.85) };
+    return { features, maskPreview: c.toDataURL("image/jpeg", 0.85) };
   } finally {
     bmp.close();
   }

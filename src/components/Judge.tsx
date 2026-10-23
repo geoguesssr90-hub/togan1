@@ -123,29 +123,13 @@ function SingleJudge({ model, onBack, modeSwitch }: ModeProps) {
     return <div className="screen"><p className="meta">解析中…</p></div>;
   }
 
-  const { features: f, maskPreview, recognition } = shot.analysis;
+  const { features: f, maskPreview } = shot.analysis;
   const maskFigure = (
     <>
       <h3>石として認識した範囲</h3>
       <img className="mask-one" src={maskPreview} alt="石として認識した範囲" />
     </>
   );
-
-  // 石を認識できなかったときは、誤った等級を見せないよう等級・確率・根拠を出さない
-  if (!recognition.ok) {
-    return (
-      <div className="screen">
-        <button className="back" onClick={onBack}>← 最初の画面</button>
-        <p className="warnings bad">
-          石を認識できませんでした。黒い台紙の上に石を置いて、点線の枠の中に入れて撮り直してください
-        </p>
-        {maskFigure}
-        <div className="judge-end">
-          <button className="primary wide" onClick={restart}>撮り直す</button>
-        </div>
-      </div>
-    );
-  }
 
   const lowArea = f.areaRatio < 0.03;
   const probs = predict(model, f);
