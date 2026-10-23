@@ -205,19 +205,16 @@ button.link-danger { display: block; margin: 36px auto 0; border: none; backgrou
 .start-choices { display: grid; gap: 16px; }
 .start-choice {
   display: grid;
-  gap: 6px;
-  justify-items: center;
+  place-items: center;
   text-align: center;
-  padding: 22px 18px;
-  min-height: 108px;
+  padding: 0 18px;
+  min-height: 72px;
   border-radius: var(--radius);
   border: 1.5px solid var(--accent);
   background: var(--surface);
   color: var(--accent);
 }
 .start-choice strong { font-family: var(--serif); font-size: 22px; font-weight: 600; letter-spacing: 0.12em; }
-.start-choice span { font-size: 13px; font-weight: 400; color: var(--muted); }
 .start-choice.primary { background: var(--accent); color: var(--accent-ink); }
-.start-choice.primary span { color: var(--accent-ink); opacity: 0.85; }
 .start-note { margin-top: auto; padding-top: 40px; text-align: center; font-size: 12px; color: var(--muted); }
 .start-note span { display: inline-block; }

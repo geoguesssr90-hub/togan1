@@ -10,11 +10,9 @@ export function Start({ onJudge, onTrain }: { onJudge: () => void; onTrain: () =
       <div className="start-choices">
         <button className="start-choice primary" onClick={onJudge}>
           <strong>判定する</strong>
-          <span>石を撮影して、等級を判定します</span>
         </button>
         <button className="start-choice" onClick={onTrain}>
           <strong>学習する</strong>
-          <span>石の写真を集めて、判定モデルを育てます</span>
         </button>
       </div>
 
